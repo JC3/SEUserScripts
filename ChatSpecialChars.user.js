@@ -30,8 +30,10 @@
         buttons.appendChild(document.createTextNode(" "));
     }
 
-    createButton('ndash', '–');
-    createButton('mdash', '—');
-    createButton('rarr', '?');
+    // use fromCharCode instead of actual chars because there seems to be encoding
+    // issues when transferring from github to tampermonkey.
+    createButton('ndash', String.fromCharCode(8211));
+    createButton('mdash', String.fromCharCode(8212));
+    createButton('rarr', String.fromCharCode(8594));
 
 })();
