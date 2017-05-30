@@ -5,6 +5,8 @@
 // @description  Adds ability to get permalinks for parameterized queries.
 // @author       Jason C
 // @match        *://data.stackexchange.com/*/query/*
+// @exclude      *://data.stackexchange.com/*/query/edit*
+// @exclude      *://data.stackexchange.com/*/query/new*
 // @grant        none
 // ==/UserScript==
 
