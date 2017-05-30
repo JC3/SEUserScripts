@@ -1,16 +1,16 @@
 // ==UserScript==
 // @name         Revision Comment Links
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.00
+// @version      1.01
 // @description  Make URLs in revision comments clickable.
 // @author       Jason C
-// @include      /^https?:\/\/([^/]*\.)?stackoverflow\.com\/([^/]*\/)*revisions(\/.*)*$/
-// @include      /^https?:\/\/([^/]*\.)?serverfault\.com\/([^/]*\/)*revisions(\/.*)*$/
-// @include      /^https?:\/\/([^/]*\.)?superuser\.com\/([^/]*\/)*revisions(\/.*)*$/
-// @include      /^https?:\/\/([^/]*\.)?stackexchange\.com\/([^/]*\/)*revisions(\/.*)*$/
-// @include      /^https?:\/\/([^/]*\.)?askubuntu\.com\/([^/]*\/)*revisions(\/.*)*$/
-// @include      /^https?:\/\/([^/]*\.)?stackapps\.com\/([^/]*\/)*revisions(\/.*)*$/
-// @include      /^https?:\/\/([^/]*\.)?mathoverflow\.net\/([^/]*\/)*revisions(\/.*)*$/
+// @include      /^https?:\/\/([^/]*\.)?stackoverflow\.com\/([^/]*\/)*revisions([\/?#].*)*$/
+// @include      /^https?:\/\/([^/]*\.)?serverfault\.com\/([^/]*\/)*revisions([\/?#].*)*$/
+// @include      /^https?:\/\/([^/]*\.)?superuser\.com\/([^/]*\/)*revisions([\/?#].*)*$/
+// @include      /^https?:\/\/([^/]*\.)?stackexchange\.com\/([^/]*\/)*revisions([\/?#].*)*$/
+// @include      /^https?:\/\/([^/]*\.)?askubuntu\.com\/([^/]*\/)*revisions([\/?#].*)*$/
+// @include      /^https?:\/\/([^/]*\.)?stackapps\.com\/([^/]*\/)*revisions([\/?#].*)*$/
+// @include      /^https?:\/\/([^/]*\.)?mathoverflow\.net\/([^/]*\/)*revisions([\/?#].*)*$/
 // @grant        none
 // ==/UserScript==
 
