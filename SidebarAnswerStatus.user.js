@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sidebar Answer Status
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.04
+// @version      1.05
 // @description  Show answer status of questions in sidebar.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -124,7 +124,14 @@
         for (var q of Object.values(qs.items)) {
             var status = qs.questions[q.id].status;
             if (status.is_answered) { // change to status.answer_count > 0 if you'd prefer.
-                q.votes.css('border', `1px solid ${q.votes.css('color')}` /*'1px solid black'*/);
+                // color is a pain, on some sites (like so) the text is white. for now fix this
+                // quickly with a hack that probably will still fail in places. css colors are
+                // a huge pain to convert to rgb so, for now, don't... just cross fingers.
+                var color = q.votes.css('color');
+                if (color == $(document.body).css('background-color'))
+                    color = $(document.body).css('color');
+                // blech
+                q.votes.css('border', `1px solid ${color}`);
                 q.link.attr('title', `Answered (${status.answer_count})`);
             } else {
                 q.link.attr('title', `Unanswered (${status.answer_count})`);
