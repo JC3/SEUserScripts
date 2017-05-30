@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sidebar Answer Status
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.03
+// @version      1.04
 // @description  Show answer status of questions in sidebar.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -76,6 +76,8 @@
      */
     function getAnswerStatus (qs) {
 
+        var site = document.location.host;
+
         // if (allcached) also handles the case where there's no items found, but
         // do this first just so we don't also log stats.
         if (qs.items.length === 0)
@@ -83,7 +85,7 @@
 
         var uncached = {}; // will hold a set of ids need to be queried from API.
         for (let qid in qs.questions)
-            if ((qs.questions[qid].status = cacheLoad(qid)) === null)
+            if ((qs.questions[qid].status = cacheLoad(`${site}/${qid}`)) === null)
                 uncached[qid] = true;
         var allcached = $.isEmptyObject(uncached);
 
@@ -100,7 +102,6 @@
         if (allcached)
             return $.when(qs);
 
-        var site = document.location.host;
         var ids = Object.keys(uncached).join(';');
         var url = `//api.stackexchange.com/2.2/questions/${ids}?pagesize=100&order=desc&sort=activity&site=${site}&filter=!4(YqyYcHA.0whnoIN`;
 
@@ -109,7 +110,7 @@
                 console.log(`Sidebar Answer Status: API quota getting low (${r.quota_remaining})`);
             for (let item of r.items) {
                 qs.questions[item.question_id].status = item;
-                cacheStore(item.question_id, item);
+                cacheStore(`${site}/${item.question_id}`, item);
             }
             return qs;
         });
@@ -135,8 +136,8 @@
     }
 
     /* Save an object to persistent storage. The object must not have a property
-     * named 'expires' and the key must not be an integer, otherwise it might
-     * conflict with the question cache.
+     * named 'expires', otherwise it might conflict with the question cache. Try
+     * not to pick a conflicting key name, either.
      */
     function objectStore (key, obj) {
 
@@ -148,9 +149,8 @@
 
     }
 
-    /* Load an object from persistent storage, return def if it's not there. The
-     * key should not be an integer otherwise you might get something from the
-     * question cache.
+    /* Load an object from persistent storage, return def if it's not there. Try
+     * not to pick a key that conflicts with the question cache.
      */
     function objectLoad (key, def) {
 
@@ -167,8 +167,7 @@
     }
 
     /* Store an object in the cache. The expiration timestamp will be set to
-     * cacheCurrentTime + cacheExpirationTime. Key is always an integer question
-     * ID here.
+     * cacheCurrentTime + cacheExpirationTime.
      */
     function cacheStore (key, item) {
 
@@ -184,9 +183,8 @@
 
     }
 
-    /* Load an object from the cache, where key should be a question ID. Will
-     * return null if item is not in the cache (or has expired). Deletes
-     * expired items from the cache.
+    /* Load an object from the cache. Will return null if item is not in
+     * the cache (or has expired). Deletes expired items from the cache.
      */
     function cacheLoad (key) {
 
