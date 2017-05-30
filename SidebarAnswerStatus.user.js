@@ -1,18 +1,16 @@
 // ==UserScript==
 // @name         Sidebar Answer Status
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.01
+// @version      1.02
 // @description  Show answer status of questions in sidebar.
 // @author       Jason C
-// @match        http*://*.stackexchange.com/questions/*
-// @match        http*://*.stackoverflow.com/questions/*
-// @match        http*://stackoverflow.com/questions/*
-// @match        http*://*.superuser.com/questions/*
-// @match        http*://superuser.com/questions/*
-// @match        http*://*.serverfault.com/questions/*
-// @match        http*://serverfault.com/questions/*
-// @match        http*://*.stackapps.com/questions/*
-// @match        http*://stackapps.com/questions/*
+// @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
+// @include      /^https?:\/\/([^/]*\.)?serverfault.com/questions/\d.*$/
+// @include      /^https?:\/\/([^/]*\.)?superuser.com/questions/\d.*$/
+// @include      /^https?:\/\/([^/]*\.)?stackexchange.com/questions/\d.*$/
+// @include      /^https?:\/\/([^/]*\.)?askubuntu.com/questions/\d.*$/
+// @include      /^https?:\/\/([^/]*\.)?stackapps.com/questions/\d.*$/
+// @include      /^https?:\/\/([^/]*\.)?mathoverflow\.net/questions/\d.*$/
 // @grant        none
 // ==/UserScript==
 
