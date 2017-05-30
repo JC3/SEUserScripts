@@ -93,7 +93,7 @@
 
         for (var q of Object.values(qs.items)) {
             var status = qs.questions[q.id].status;
-            if (status.is_answered) { // change to q.status.answer_count > 0 if you'd prefer.
+            if (status.is_answered) { // change to status.answer_count > 0 if you'd prefer.
                 q.votes.css('border', `1px solid ${q.votes.css('color')}` /*'1px solid black'*/);
                 q.link.attr('title', `Answered (${status.answer_count})`);
             } else {
