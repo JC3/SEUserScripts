@@ -47,7 +47,8 @@
      *
      *    { id: question id,
      *      votes: the score dom element,
-     *      link: the question link dom element }
+     *      link: the question link dom element,
+     *      title: the question title dom element }
      */
     function getSidebarQuestions () {
 
@@ -81,6 +82,8 @@
      *
      *   { is_answered: boolean,
      *     answer_count: number of answers,
+     *     up_vote_count: number of upvotes,
+     *     down_vote_count: number of downvotes,
      *     question_id: id of the question }
      */
     function getAnswerStatus (qs) {
