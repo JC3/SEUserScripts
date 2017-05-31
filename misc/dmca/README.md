@@ -1,3 +1,8 @@
+Misc. links:
+
+- Concerning: [My post was removed due to DMCA Takedown Notice — what can I do?](https://anime.meta.stackexchange.com/q/4050/7864)
+- [SEDE query](http://data.stackexchange.com/anime/query/678784/dmca-related-reports) with some reports.
+
 List of all posts:
 
 Q/A:
