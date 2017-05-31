@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sidebar Answer Status
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.05
+// @version      1.06
 // @description  Show answer status of questions in sidebar.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -24,11 +24,19 @@
     const cacheCurrentTime = Date.now();
     const cacheExpirationTime = 30 * 60 * 1000; // 30 minutes, in milliseconds
 
+    // Stuff we store persistently, like stats.
+    var persist = objectLoad('persist', {});
+    persist.api_avoided = persist.api_avoided || 0;
+    persist.api_success = persist.api_success || 0;
+    persist.api_total = persist.api_total || 0;
+    persist.api_cachedthis = false;
+
     // Do everything. Error handling is for the birds.
     getSidebarQuestions()
       .then(getAnswerStatus)
       .then(showIfAnswered)
-      .always(cacheExpire); // Cache cleanup last so it doesn't slow load time.
+      .always(cacheExpire)
+      .always(finalize);
 
     /* Get sidebar question data. Returns a promise. Data is:
      *
@@ -56,7 +64,8 @@
                 qs.items.push({
                     id: qid[1],
                     votes: $(obj),
-                    link: $(obj).parent()
+                    link: $(obj).parent(),
+                    title: $(obj).parent().next('.question-hyperlink')
                 });
             }
         });
@@ -79,7 +88,7 @@
         var site = document.location.host;
 
         // if (allcached) also handles the case where there's no items found, but
-        // do this first just so we don't also log stats.
+        // do this first just so we don't also tabulate stats.
         if (qs.items.length === 0)
             return $.when(qs);
 
@@ -89,25 +98,20 @@
                 uncached[qid] = true;
         var allcached = $.isEmptyObject(uncached);
 
-        // this little block is just stats.
-        var stats = objectLoad('stats', {a:0,c:0});
-        if (allcached)
-            stats.c = stats.c + 1;
-        else
-            stats.a = stats.a + 1;
-        objectStore('stats', stats);
-        console.log(`Sidebar Answer Status: ${allcached?'Cached':'API'} (API=${stats.a} Cached=${stats.c})`);
-
         // if no items on this page need queried, we can avoid the API call.
-        if (allcached)
+        persist.api_total ++;
+        if (allcached) {
+            persist.api_avoided ++;
+            persist.api_cachedthis = true;
             return $.when(qs);
+        }
 
         var ids = Object.keys(uncached).join(';');
-        var url = `//api.stackexchange.com/2.2/questions/${ids}?pagesize=100&order=desc&sort=activity&site=${site}&filter=!4(YqyYcHA.0whnoIN`;
+        var url = `//api.stackexchange.com/2.2/questions/${ids}?pagesize=100&order=desc&sort=activity&site=${site}&filter=!L_Zlzgf-plnNHQRH1DMltE`;
 
         return $.getJSON(url).then(function (r) {
-            if (r.quota_remaining < 100)
-                console.log(`Sidebar Answer Status: API quota getting low (${r.quota_remaining})`);
+            persist.api_success ++;
+            persist.api_quota = r.quota_remaining;
             for (let item of r.items) {
                 qs.questions[item.question_id].status = item;
                 cacheStore(`${site}/${item.question_id}`, item);
@@ -123,22 +127,29 @@
 
         for (var q of Object.values(qs.items)) {
             var status = qs.questions[q.id].status;
-            if (status.is_answered) { // change to status.answer_count > 0 if you'd prefer.
-                // color is a pain, on some sites (like so) the text is white. for now fix this
-                // quickly with a hack that probably will still fail in places. css colors are
-                // a huge pain to convert to rgb so, for now, don't... just cross fingers.
-                var color = q.votes.css('color');
-                if (color == $(document.body).css('background-color'))
-                    color = $(document.body).css('color');
-                // blech
-                q.votes.css('border', `1px solid ${color}`);
-                q.link.attr('title', `Answered (${status.answer_count})`);
-            } else {
-                q.link.attr('title', `Unanswered (${status.answer_count})`);
-            }
+            if (status.is_answered) // change to status.answer_count > 0 if you'd prefer.
+                q.votes.css('border', `1px solid rgba(0,0,0,0.5)`);
+            if (status.answer_count === 0)
+                q.title.css('font-style', 'italic');
+            q.link.attr('title', `${status.is_answered?'A':'Una'}nswered (${status.answer_count}), +${status.up_vote_count} / -${status.down_vote_count}`);
         }
 
         return $.when();
+
+    }
+
+    /* Called at very end, stores persist and prints a message with some stats.
+     */
+    function finalize () {
+
+        objectStore('persist', persist);
+
+        var s = persist.api_avoided;
+        var a = persist.api_success;
+        var f = persist.api_total - (persist.api_avoided + persist.api_success);
+        var c = persist.api_cachedthis;
+        var q = persist.api_quota;
+        console.log(`Sidebar Answer Status: ${c?'Cached':'API'} (Cached=${s}, Queried=${a}, Failed=${f}, Quota=${q})`);
 
     }
 
@@ -229,5 +240,24 @@
         }
 
     }
+
+    /* Delete all persistent data, restoring to "factory" conditions. Provided to allow
+     * easier testing through console.
+     */
+    unsafeWindow.sidebarAnswerStatusReset = function () {
+
+        var keys = [];
+        for (let key of GM_listValues())
+            keys.push(key);
+        for (let key of keys) {
+            try {
+                console.log(`Removing: ${key} => ${JSON.stringify(GM_getValue(key))}`);
+                GM_deleteValue(key);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+    };
 
 })();
