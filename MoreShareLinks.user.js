@@ -38,7 +38,7 @@
         let share_html = `<a href="${url}">${title_html}</a>`;
         // BBCode doesn't support escaping square brackets, unfortunately. I could
         // be more conservative about replacements but, whatever.
-        let title_bb = questionTitle.replace('(', '').replace(']', ')');
+        let title_bb = questionTitle.replace('[', '(').replace(']', ')');
         let share_bb = `[url=${url}]${title_bb}[/url]`;
 
         $(document.createTextNode('Markdown (includes your user id):'))
