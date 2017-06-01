@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sidebar Answer Status
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.06
+// @version      1.07
 // @description  Show answer status of questions in sidebar.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -260,6 +260,42 @@
                 console.error(e);
             }
         }
+
+    };
+
+    /** Dump some info to the console for testing.
+     */
+    unsafeWindow.sidebarAnswerStatusInfo = function () {
+
+        var cache = 0, other = 0;
+
+        console.log('Cache:');
+        for (let key of GM_listValues()) {
+            try {
+                let value = JSON.parse(GM_getValue(key));
+                if (value.expires) {
+                    cache ++;
+                    console.log(`${key} => ${JSON.stringify(value)}`);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        console.log('Other:');
+        for (let key of GM_listValues()) {
+            try {
+                let value = JSON.parse(GM_getValue(key));
+                if (!value.expires) {
+                    other ++;
+                    console.log(`${key} => ${JSON.stringify(value)}`);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        console.log(`Persistent Storage: Cached=${cache}, Other=${other}`);
 
     };
 
