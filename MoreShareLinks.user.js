@@ -46,7 +46,6 @@
         $('<input type="text"/>')
             .attr('value', share_md)
             .attr('style', style)
-            .click(function () { this.select(); })
             .insertBefore(icons);
         $(document.createTextNode('HTML (includes your user id):'))
             .insertBefore(icons);
