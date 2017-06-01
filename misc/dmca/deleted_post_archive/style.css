@@ -36,3 +36,21 @@
 .index-table td {
 	white-space: nowrap;
 }
+
+blockquote:before,q:before,blockquote:after,q:after {
+    content: "";
+    content: none
+}
+
+blockquote {
+    quotes: none
+    margin-bottom: 10px;
+    padding: 10px;
+    background-color: #FFF9E3;
+    border-left: 2px solid #ffeb8e
+}
+
+blockquote *:last-child {
+    margin-bottom: 0
+}
+

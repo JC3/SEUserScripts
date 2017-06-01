@@ -1,5 +1,5 @@
 # Takes, as input, archived_posts.csv (result of an SEDE query, see readme.md).
-# Produces, as output, deleted_post_ids.txt.
+# Produces, as output, deleted_post_ids.txt, and a bunch of HTML in deleted_posts_archive\.
 
 import cgi
 import csv
