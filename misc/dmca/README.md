@@ -1,10 +1,11 @@
-**A list of posts by author is available in contributors.md, you can look for your posts there!**
+**A list of posts by author is available in contributors_questions_tags.md and contributors_answers.md, you can look for your posts there!**
 
 Misc. links:
 
 - Concerning: [My post was removed due to DMCA Takedown Notice — what can I do?](https://anime.meta.stackexchange.com/q/4050/7864)
 - [SEDE query](http://data.stackexchange.com/anime/query/678784/dmca-related-reports) with some reports.
-- [SEDE query](http://data.stackexchange.com/anime/query/679228/dmca-list-generator?opt.textResults=true) used to generate contributors.md.
+- [SEDE query](http://data.stackexchange.com/anime/query/679228/dmca-list-generator?opt.textResults=true) used to generate contributors_questions_tags.md.
+- [SEDE query](http://data.stackexchange.com/anime/query/679260/answer-authors-for-takedown-list?opt.textResults=true) used to generate contributors_answers.md.
 
 List of all posts:
 

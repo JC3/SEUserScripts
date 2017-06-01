@@ -1,4 +1,6 @@
-﻿This is a list of all contributors (authors *and* editors) to all posts (questions, as well as tag wikis) identified in the takedown notice list. User names are in alphabetical order, so find yourself in this list to see if there's anything you want to take a look at.
+﻿This is a list of all contributors (authors *and* editors) to all questions and tag wikis identified in the takedown notice list. User names are in alphabetical order, so find yourself in this list to see if there's anything you want to take a look at.
+
+This list does *not* include answers. For that, see contributors_answers.md in this same directory.
 
 - **[2bffsforever](https://anime.stackexchange.com/users/30691) (Author) - [What chapter is episode 150 of naruto](https://anime.stackexchange.com/q/38742)**                                                                                                   
 - **[Abhimanyu](https://anime.stackexchange.com/users/4831) (Author) - [In which episode of Golden Time did Koko say "I love you" to Banri on the school staircase?](https://anime.stackexchange.com/q/29443)**                                                 
