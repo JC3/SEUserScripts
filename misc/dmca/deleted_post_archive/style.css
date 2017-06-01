@@ -1,0 +1,38 @@
+* {
+	font-family: sans-serif;
+}
+
+.score-cell {
+	text-align: center;
+	vertical-align: top;
+	padding-right: 1ex;
+	font-size: 120%;
+	padding-top: 1ex;
+}
+
+.post-cell {
+	padding-top: 1ex;
+}
+
+.author-cell {
+	text-align: right;
+	padding-top: 1ex;
+	padding-bottom: 2ex;
+	border-bottom: 1px solid #888;
+}
+
+.author-card {
+	background: #eee;
+	display: inline-block;
+	padding: 1ex;
+}
+
+#content {
+	width: 800px;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.index-table td {
+	white-space: nowrap;
+}

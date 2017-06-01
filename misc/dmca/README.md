@@ -2,6 +2,8 @@
 
 History of all posts is in archived_*.csv, taken from this week's SEDE dump which was prior to any posts being deleted.
 
+HTML archive of posts deleted so far is in deleted_post_archive.7z, download it then view index.html. I am updating it periodically.
+
 Misc. links:
 
 - Concerning: [My post was removed due to DMCA Takedown Notice — what can I do?](https://anime.meta.stackexchange.com/q/4050/7864)
