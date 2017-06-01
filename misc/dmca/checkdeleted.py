@@ -9,7 +9,7 @@ import os
 import requests
 import time
 
-updateStatus = False # Change to True to recheck from API
+updateStatus = True # Change to True to recheck from API
 
 posts = {}
 
