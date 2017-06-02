@@ -10,6 +10,10 @@
 	background: #dfd;
 }
 
+.deleted .score-cell {
+	border-left: 3px solid red;
+}
+
 .score-cell {
 	text-align: center;
 	vertical-align: top;

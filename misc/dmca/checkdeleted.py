@@ -87,6 +87,8 @@ def generatePostRow (f, post, parent):
             cls = cls + ' accepted'
     except:
         pass
+    if not post['StillExists']:
+        cls = cls + ' deleted'
     try:
         userlink = '<a href="https://anime.stackexchange.com/users/{}">{}</a>'.format(int(post['OwnerUserId']), user)
     except:
