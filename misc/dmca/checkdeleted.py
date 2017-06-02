@@ -159,6 +159,6 @@ with open('deleted_post_archive/index.html', 'w') as idx:
                 ))
             deleted = deleted + 1
 
-    idx.write('</table></body></html>\n')
+    idx.write('</table><center class="note">Note: May include items deleted for other reasons.</center></div></body></html>\n')
 
     print 'Total: {}, Deleted: {}'.format(len(posts), deleted)

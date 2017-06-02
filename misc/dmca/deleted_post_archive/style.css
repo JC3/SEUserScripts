@@ -92,3 +92,9 @@ blockquote *:last-child {
     margin-bottom: 0
 }
 
+center.note {
+	margin-top: 3ex;
+	font-style: italic;
+	font-size: 80%;
+}
+
