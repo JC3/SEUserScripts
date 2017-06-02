@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         More Share Links
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.02
+// @version      1.03
 // @description  Adds other formatting options to share links.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -19,7 +19,17 @@
 (function() {
     'use strict';
 
-    const dataKey = 'moresharelinks-id';
+    const DATA_ID        = 'moresharelinks-id';
+    const DATA_SHORT_URL = 'moresharelinks-short-url';
+    const DATA_LONG_URL  = 'moresharelinks-url';
+    const OPT_LAST_ID    = 'lastSelectedId';
+    const OPT_SHORTEN    = 'shortenUrl';
+    const LABEL_BASIC    = 'Share a link to this question';
+    const LABEL_MARKDOWN = 'Markdown';
+    const LABEL_HTML     = 'HTML';
+    const LABEL_BBCODE   = 'BBCode';
+    const LABEL_USERID   = ' (includes your user id)';
+
     const questionTitle = $('#question-header > h1').text().trim();
 
     // DOMSubtreeModified is deprecated in favor of MutationObservers but I kind of
@@ -34,69 +44,121 @@
         let style = input.attr('style');
         let icons = tip.children('#share-icons');
 
+        let url_short;
+        if (/\/[0-9]+\/[0-9]+$/.test(url)) // Make sure user ID present (missing when not logged in)
+            url_short = url.replace(/\/[0-9]+$/, '');
+        else
+            url_short = url;
+
+        // Markdown: Escape brackets only. Not escaping slashes for now because
+        // doing that ruins MathJax. Not sure what the right thing to do there is...
         let title_md = questionTitle.replace('[', '\\[').replace(']', '\\]');
         let share_md = `[${title_md}](${url})`;
+        let share_md_short = `[${title_md}](${url_short})`;
         // Very minimal HTML escaping...
-        let title_html = questionTitle.replace('<', '&lt;').replace('>', '&gt;');
+        let title_html = questionTitle.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;');
         let share_html = `<a href="${url}">${title_html}</a>`;
+        let share_html_short = `<a href="${url_short}">${title_html}</a>`;
         // BBCode doesn't support escaping square brackets, unfortunately. I could
         // be more conservative about replacements but, whatever.
         let title_bb = questionTitle.replace('[', '(').replace(']', ')');
         let share_bb = `[url=${url}]${title_bb}[/url]`;
+        let share_bb_short = `[url=${url_short}]${title_bb}[/url]`;
 
-        // Use attrr(data-*) instead of data(), because selectors are simpler later.
+        // Use attr(data-*) instead of data() for msl id, because selectors are simpler later.
+        var textBasic, textMarkdown, textHTML, textBBCode;
+        textBasic = tip[0].childNodes[0];
         input
-            .attr(`data-${dataKey}`, 'basic');
-        $(document.createTextNode('Markdown (includes your user id):'))
+            .data(DATA_LONG_URL, url)
+            .data(DATA_SHORT_URL, url_short)
+            .attr(`data-${DATA_ID}`, 'basic');
+        $(textMarkdown = document.createTextNode(''))
             .insertBefore(icons);
         $('<input type="text"/>')
-            .attr('value', share_md)
+            .data(DATA_LONG_URL, share_md)
+            .data(DATA_SHORT_URL, share_md_short)
             .attr('style', style)
-            .attr(`data-${dataKey}`, 'markdown')
+            .attr(`data-${DATA_ID}`, 'markdown')
             .insertBefore(icons);
-        $(document.createTextNode('HTML (includes your user id):'))
+        $(textHTML = document.createTextNode(''))
             .insertBefore(icons);
         $('<input type="text"/>')
-            .attr('value', share_html)
+            .data(DATA_LONG_URL, share_html)
+            .data(DATA_SHORT_URL, share_html_short)
             .attr('style', style)
-            .attr(`data-${dataKey}`, 'html')
+            .attr(`data-${DATA_ID}`, 'html')
             .insertBefore(icons);
-        $(document.createTextNode('BBCode (includes your user id):'))
+        $(textBBCode = document.createTextNode(''))
             .insertBefore(icons);
         $('<input type="text"/>')
-            .attr('value', share_bb)
+            .data(DATA_LONG_URL, share_bb)
+            .data(DATA_SHORT_URL, share_bb_short)
             .attr('style', style)
-            .attr(`data-${dataKey}`, 'bbcode')
+            .attr(`data-${DATA_ID}`, 'bbcode')
             .insertBefore(icons);
+
+        let checkbox;
+        $('<label/>')
+            .css('float', 'right')
+            .append((checkbox = $('<input type="checkbox"/>')).prop('checked', load(OPT_SHORTEN, false)))
+            .append(document.createTextNode('Remove user ID'))
+            .appendTo(icons);
+
+        checkbox.change(function () {
+            let shorten = $(this).is(':checked');
+            textBasic.data = makeLabel(LABEL_BASIC, shorten);
+            textHTML.data = makeLabel(LABEL_HTML, shorten);
+            textMarkdown.data = makeLabel(LABEL_MARKDOWN, shorten);
+            textBBCode.data = makeLabel(LABEL_BBCODE, shorten);
+            tip.children('input[type="text"]').each(function (_, i) {
+                $(i).attr('value', $(i).data(shorten ? DATA_SHORT_URL : DATA_LONG_URL));
+            });
+            store(OPT_SHORTEN, shorten);
+        });
+
+        // Kludge to initialize label values and stuff.
+        checkbox.trigger('change');
 
         // Bonus feature.
         tip.children('input[type="text"]').click(function () {
-            try {
-                GM_setValue(dataKey, $(this).data(dataKey));
-            } catch (e) {
-                console.error(e);
-            }
+            store(OPT_LAST_ID, $(this).data(DATA_ID));
             this.select();
         });
 
         // Restore last clicked item so we can reselect.
-        let lastSelected = 'basic';
-        try {
-            lastSelected = GM_getValue(dataKey, lastSelected);
-        } catch (e) {
-            console.error(e);
-        }
+        let lastSelected = load(OPT_LAST_ID, 'basic');
 
         // Hack to restore focus to the original share input, because I guess that
         // auto-select happens *after* this event is processed.
         setTimeout(function () {
-            let initial = tip.children(`input[type="text"][data-${dataKey}="${lastSelected}"]`);
+            let initial = tip.children(`input[type="text"][data-${DATA_ID}="${lastSelected}"]`);
             if (initial.length === 0)
                 initial = input;
             initial.click();
         }, 10);
 
     });
+
+    function makeLabel (label, simplified) {
+        return `${label}${simplified ? '' : LABEL_USERID}:`;
+    }
+
+    function store (key, value) {
+        try {
+            GM_setValue(key, value);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function load (key, def) {
+        try {
+            return GM_getValue(key, def);
+        } catch (e) {
+            console.error(e);
+            return def;
+        }
+    }
 
     unsafeWindow.moreShareLinksReset = function () {
         GM_deleteValue(dataKey);
