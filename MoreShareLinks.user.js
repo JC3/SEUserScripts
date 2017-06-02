@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         More Share Links
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.01
+// @version      1.02
 // @description  Adds other formatting options to share links.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -20,7 +20,7 @@
     'use strict';
 
     const dataKey = 'moresharelinks-id';
-    const questionTitle = $('#question-header').text().trim();
+    const questionTitle = $('#question-header > h1').text().trim();
 
     // DOMSubtreeModified is deprecated in favor of MutationObservers but I kind of
     // do not care at the moment, unless somebody reports breakage.
