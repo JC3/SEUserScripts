@@ -1,7 +1,6 @@
 // ==UserScript==
 // @name         Sidebar Answer Status
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.07
 // @description  Show answer status of questions in sidebar.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -143,7 +142,7 @@
 
     /* Called at very end, stores persist and prints a message with some stats.
      */
-    function finalize () {
+    function finalize (e) {
 
         objectStore('persist', persist);
 
@@ -153,6 +152,18 @@
         var c = persist.api_cachedthis;
         var q = persist.api_quota;
         console.log(`Sidebar Answer Status: ${c?'Cached':'API'} (Cached=${s}, Queried=${a}, Failed=${f}, Quota=${q})`);
+
+        if (e && e.status && (e.status < 200 || e.status >= 300)) {
+            var msg = (e.responseJSON && e.responseJSON.error_message) || e.statusText;
+            StackExchange.helpers.showBannerMessage(`<b>Sidebar Answer Status: ${msg}</b>`, 'error');
+        } else if (!c) {
+            if (q <= 0)
+                StackExchange.helpers.showBannerMessage(`<b>Sidebar Answer Status: Your API quota is gone for today!</b>`, 'error');
+            else if (q <= 10)
+                StackExchange.helpers.showBannerMessage(`<b>Sidebar Answer Status: Your API quota is almost gone (${q} remaining)!</b>`, 'error');
+            else if (q <= 50)
+                StackExchange.helpers.showBannerMessage(`<b>Sidebar Answer Status: Your API quota is getting low (${q} remaining)!</b>`, 'warning');
+        }
 
     }
 
