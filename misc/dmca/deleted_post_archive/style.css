@@ -33,6 +33,10 @@
 	margin-right: auto;
 }
 
+img {
+	max-width: 100%;
+}
+
 .index-table td {
 	white-space: nowrap;
 }
