@@ -64,19 +64,28 @@ except OSError as exception:
     if exception.errno != errno.EEXIST:
         raise # Just let it throw out of the program
 
-def generatePostRow (f, post):
+def generatePostRow (f, post, parent):
     score = int(post['Score'])
     body = post['Body']
     user = cgi.escape(post['UserDisplayName'])
     when = cgi.escape(post['CreationDate'])
+    if int(post['PostTypeId']) == 1:
+        cls = 'question'
+    else:
+        cls = 'answer'
+    try:
+        if parent and int(post['Id']) == int(parent['AcceptedAnswerId']):
+            cls = cls + ' accepted'
+    except:
+        pass
     try:
         userlink = '<a href="https://anime.stackexchange.com/users/{}">{}</a>'.format(int(post['OwnerUserId']), user)
     except:
         userlink = user
     whenlink = '<a href="https://anime.stackexchange.com/q/{}">{}</a>'.format(int(post['Id']), when)
-    f.write('<tr><td class="score-cell" rowspan="2">{}\n'.format(score))
+    f.write('<tr class="{}"><td class="score-cell" rowspan="2">{}\n'.format(cls, score))
     f.write('<td class="post-cell"><a name="{}"></a>{}\n'.format(int(post['Id']), body))
-    f.write('<tr><td class="author-cell"><div class="author-card">{}<br>{}</div>\n'.format(userlink, whenlink))
+    f.write('<tr class="{}"><td class="author-cell"><div class="author-card">{}<br>{}</div>\n'.format(cls, userlink, whenlink))
     
 def generatePostHTML (post):
 
@@ -87,7 +96,7 @@ def generatePostHTML (post):
         f.write('<center><a href="index.html">Index</a></center>\n')
         f.write('<h1><a href="https://anime.stackexchange.com/q/{}">{}</a></h1><table>\n'.format(int(post['Id']), title))
 
-        generatePostRow(f, post)
+        generatePostRow(f, post, None)
 
         answers = {}
         for k, answer in posts.items():
@@ -95,7 +104,7 @@ def generatePostHTML (post):
                 answers[k] = answer
         
         for _, answer in sorted(answers.items(), key=lambda x: -int(x[1]['Score'])):
-            generatePostRow(f, answer)
+            generatePostRow(f, answer, post)
         
         f.write('</table><center><a href="index.html">Index</a></center></div></body></html>\n')
     
