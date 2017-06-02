@@ -18,7 +18,16 @@ with open('archived_posts.csv') as f:
     reader = csv.DictReader(f)
     for post in reader:
         if int(post['PostTypeId']) <= 2:
+            post['Comments'] = []
             posts[int(post['Id'])] = post
+
+with open('archived_comments.csv') as f:
+    reader = csv.DictReader(f)
+    for comment in reader:
+        posts[int(comment['PostId'])]['Comments'].append(comment)
+
+for _, post in posts.items():
+    post['Comments'].sort(key=lambda x:x['Id'])
 
 # Possibly update deleted status from the API, otherwise load it from the file.
 if updateStatus:
@@ -82,10 +91,21 @@ def generatePostRow (f, post, parent):
         userlink = '<a href="https://anime.stackexchange.com/users/{}">{}</a>'.format(int(post['OwnerUserId']), user)
     except:
         userlink = user
+    if len(post['Comments']) > 0:
+        rows = 3
+    else:
+        rows = 2
     whenlink = '<a href="https://anime.stackexchange.com/q/{}">{}</a>'.format(int(post['Id']), when)
-    f.write('<tr class="{}"><td class="score-cell" rowspan="2">{}\n'.format(cls, score))
+    f.write('<tr class="{}"><td class="score-cell" rowspan="{}">{}\n'.format(cls, rows, score))
     f.write('<td class="post-cell"><a name="{}"></a>{}\n'.format(int(post['Id']), body))
     f.write('<tr class="{}"><td class="author-cell"><div class="author-card">{}<br>{}</div>\n'.format(cls, userlink, whenlink))
+    if len(post['Comments']) > 0:
+        f.write('<tr class="{}"><td class="comment-cell">\n'.format(cls));
+        for comment in post['Comments']:
+            c = cgi.escape(comment['Text'])
+            i = '&mdash; {} on {}'.format(cgi.escape(comment['ActualDisplayName']), cgi.escape(comment['CreationDate']))
+            f.write('<div><span class="comment-text">{}</span> <span class="comment-info">{}</span></div>\n'.format(c, i))
+        
     
 def generatePostHTML (post):
 

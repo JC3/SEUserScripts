@@ -10,7 +10,7 @@ Misc. links:
 - [SEDE query](http://data.stackexchange.com/anime/query/678784/dmca-related-reports) with some reports.
 - [SEDE query](http://data.stackexchange.com/anime/query/679228/dmca-list-generator?opt.textResults=true) used to generate contributors_questions_tags.md.
 - [SEDE query](http://data.stackexchange.com/anime/query/679260/answer-authors-for-takedown-list?opt.textResults=true) used to generate contributors_answers.md.
-- [SEDE query](http://data.stackexchange.com/anime/query/679599/dmca-post-archive) used to generate archived_posts.csv and archived_history.csv.
+- [SEDE query](http://data.stackexchange.com/anime/query/679599/dmca-post-archive) used to generate archived_posts.csv, archived_history.csv, and archived_comments.csv.
 
 List of all posts:
 

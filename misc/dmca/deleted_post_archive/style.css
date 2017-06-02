@@ -20,6 +20,7 @@
 }
 
 .post-cell {
+	border-top: 1px solid #888;
 	padding-top: 1ex;
 }
 
@@ -27,13 +28,33 @@
 	text-align: right;
 	padding-top: 1ex;
 	padding-bottom: 2ex;
-	border-bottom: 1px solid #888;
 }
 
 .author-card {
 	background: #eee;
 	display: inline-block;
 	padding: 1ex;
+}
+
+.comment-cell {
+	padding-top: 1ex;
+	padding-bottom: 2ex;
+	padding-left: 2ex;
+	padding-right: 2ex;
+}
+
+.comment-cell span {
+	font-size: 90%;
+	color: #222;
+}
+
+.comment-cell div {
+	padding-top: 1ex;
+}
+
+.comment-info {
+	font-style: italic;
+	white-space: nowrap;
 }
 
 #content {
