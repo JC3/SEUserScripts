@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.04
+// @version      1.05
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -68,13 +68,13 @@
         // Search box ID conflicts with sidebar searchbox, breaks styling. Change it.
         topbar.find('#searchbox').attr('id', 'topbar_searchbox');
 
-        // Initialize configurable settings.
-        setWiden();
-        setThemed();
-        setBrightness();
-
-        // Must wait for css to load before topbar.height() becomes valid.
+        // Must wait for css to load before topbar.height() and other styles become valid.
         link.load(function () {
+
+            // Initialize configurable settings.
+            setWiden();
+            setThemed();
+            setBrightness();
 
             // Put a white div behind it, easier than trying to futz with opacity component of
             // background color.
