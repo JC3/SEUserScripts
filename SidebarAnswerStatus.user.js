@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sidebar Answer Status
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.08
+// @version      1.09
 // @description  Show answer status of questions in sidebar.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -15,6 +15,7 @@
 // @grant        GM_setValue
 // @grant        GM_listValues
 // @grant        GM_deleteValue
+// @grant        unsafeWindow
 // ==/UserScript==
 
 (function() {
@@ -22,7 +23,6 @@
 
     // Used by cacheLoad() and cacheStore().
     const cacheCurrentTime = Date.now();
-    const cacheExpirationTime = 30 * 60 * 1000; // 30 minutes, in milliseconds
 
     // Stuff we store persistently, like stats.
     var persist = objectLoad('persist', {});
@@ -30,6 +30,7 @@
     persist.api_success = persist.api_success || 0;
     persist.api_total = persist.api_total || 0;
     persist.api_cachedthis = false;
+    persist.opt_expire = persist.opt_expire || 30 * 60 * 1000; // 30 minutes
 
     // Do everything. Error handling is for the birds.
     getSidebarQuestions()
@@ -97,7 +98,7 @@
 
         var uncached = {}; // will hold a set of ids need to be queried from API.
         for (let qid in qs.questions)
-            if ((qs.questions[qid].status = cacheLoad(`${site}/${qid}`)) === null)
+            if ((qs.questions[qid].status = cacheLoad(`${site}/${qid}`, persist.opt_expire)) === null)
                 uncached[qid] = true;
         var allcached = $.isEmptyObject(uncached);
 
@@ -169,7 +170,7 @@
     }
 
     /* Save an object to persistent storage. The object must not have a property
-     * named 'expires', otherwise it might conflict with the question cache. Try
+     * named 'created', otherwise it might conflict with the question cache. Try
      * not to pick a conflicting key name, either.
      */
     function objectStore (key, obj) {
@@ -199,15 +200,15 @@
 
     }
 
-    /* Store an object in the cache. The expiration timestamp will be set to
-     * cacheCurrentTime + cacheExpirationTime.
+    /* Store an object in the cache. The creation timestamp will be saved, expiration
+     * is checked on load.
      */
     function cacheStore (key, item) {
 
         try {
             var entry = {
                 item: item,
-                expires: cacheCurrentTime + cacheExpirationTime
+                created: cacheCurrentTime
             };
             GM_setValue(key, JSON.stringify(entry));
         } catch (e) {
@@ -218,15 +219,16 @@
 
     /* Load an object from the cache. Will return null if item is not in
      * the cache (or has expired). Deletes expired items from the cache.
+     * Expiration time must be in milliseconds.
      */
-    function cacheLoad (key) {
+    function cacheLoad (key, expireTime) {
 
         var item = null;
 
         try {
             var entry = JSON.parse(GM_getValue(key, null));
-            if (entry && entry.expires) {
-                if (cacheCurrentTime >= entry.expires)
+            if (entry && entry.created) {
+                if (cacheCurrentTime >= (entry.created + expireTime))
                     GM_deleteValue(key);
                 else
                     item = entry.item;
@@ -249,17 +251,34 @@
             for (let key of GM_listValues())
                 keys.push(key);
             for (let key of keys)
-                cacheLoad(key); // deletes expired objects as a side-effect.
+                cacheLoad(key, persist.opt_expire); // deletes expired objects as a side-effect.
         } catch (e) {
             console.error(e);
         }
 
     }
 
+    // Console interface.
+    unsafeWindow.SidebarAnswerStatus = { };
+
+    /* Set cache expiration time. */
+    unsafeWindow.SidebarAnswerStatus.setCacheExpireSeconds = function (seconds) {
+        persist.opt_expire = seconds * 1000;
+        objectStore('persist', persist);
+    };
+
+    /* Reset statistics. */
+    unsafeWindow.SidebarAnswerStatus.resetStats = function () {
+        persist.api_avoided = 0;
+        persist.api_success = 0;
+        persist.api_total = 0;
+        objectStore('persist', persist);
+    };
+
     /* Delete all persistent data, restoring to "factory" conditions. Provided to allow
      * easier testing through console.
      */
-    unsafeWindow.sidebarAnswerStatusReset = function () {
+    unsafeWindow.SidebarAnswerStatus.resetAll = function () {
 
         var keys = [];
         for (let key of GM_listValues())
@@ -277,7 +296,7 @@
 
     /** Dump some info to the console for testing.
      */
-    unsafeWindow.sidebarAnswerStatusInfo = function () {
+    unsafeWindow.SidebarAnswerStatus.dumpInfo = function () {
 
         var cache = 0, other = 0;
 
@@ -285,7 +304,7 @@
         for (let key of GM_listValues()) {
             try {
                 let value = JSON.parse(GM_getValue(key));
-                if (value.expires) {
+                if (value.created) {
                     cache ++;
                     console.log(`${key} => ${JSON.stringify(value)}`);
                 }
@@ -298,7 +317,7 @@
         for (let key of GM_listValues()) {
             try {
                 let value = JSON.parse(GM_getValue(key));
-                if (!value.expires) {
+                if (!value.created) {
                     other ++;
                     console.log(`${key} => ${JSON.stringify(value)}`);
                 }
