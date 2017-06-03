@@ -103,7 +103,6 @@
             } else {
                 let ws = new WebSocket('wss://qa.sockets.stackexchange.com');
                 ws.onopen = function () {
-                    console.log('WebSocket open.');
                     ws.send(`${id}-topbar`);
                 };
                 ws.onmessage = function (event) {
