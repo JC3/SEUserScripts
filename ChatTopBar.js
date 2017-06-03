@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.01
+// @version      1.02
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -15,6 +15,8 @@
     'use strict';
 
     const WIDEN_TOPBAR = true; // true = 95% width, false = default fixed width
+    const THEME_BACKGROUND = false; // true = use chat themed background, false = default dark
+    const RECONNECT_WAIT_MS = 500;
 
     // The main chat server page has a topbar and is on the same domain, load it up
     // in an invisible iframe.
@@ -54,12 +56,17 @@
             opacity: 1
         });
 
-        // Search box ID conflicts with sidebar searchbox. Change it.
+        // Search box ID conflicts with sidebar searchbox, breaks styling. Change it.
         topbar.find('#searchbox').attr('id', 'topbar_searchbox');
 
         // Make topbar wider.
         if (WIDEN_TOPBAR)
             topbar.find('.topbar-wrapper').css('width', '95%');
+
+        // Take background from bottom area.
+        if (THEME_BACKGROUND)
+            topbar.css('background', $('#input-area').css('background'))
+                  .css('background-position-y', 'bottom'); // Nicer on sites like RPG.
 
         // Must wait for css to load before topbar.height() becomes valid.
         link.load(function () {
@@ -99,42 +106,37 @@
         defAccountId.then(function (id) {
 
             if (id === null) {
-                console.log('Account ID query failed?');
+                log('Account ID query failed?');
             } else {
-                let ws = new WebSocket('wss://qa.sockets.stackexchange.com');
-                ws.onopen = function () {
-                    ws.send(`${id}-topbar`);
-                };
-                ws.onmessage = function (event) {
-                    if (event && event.data) {
-                        try {
-                            var tbevent = JSON.parse(event.data);
-                            if (tbevent && tbevent.data)
-                                tbframe.StackExchange.topbar.handleRealtimeMessage(tbevent.data);
-                        } catch (e) {
-                            // Just ignore, it's a JSON parse error, means event.data wasn't a string or something.
+                let realtimeConnect = function () {
+                    log(`Opening WebSocket...`);
+                    let ws = new WebSocket('wss://qa.sockets.stackexchange.com');
+                    ws.onopen = function () {
+                        log(`WebSocket opened (your network ID is ${id}).`);
+                        ws.send(`${id}-topbar`);
+                    };
+                    ws.onmessage = function (event) {
+                        if (event && event.data) {
+                            try {
+                                var tbevent = JSON.parse(event.data);
+                                if (tbevent && tbevent.data)
+                                    tbframe.StackExchange.topbar.handleRealtimeMessage(tbevent.data);
+                            } catch (e) {
+                                // Just ignore, it's a JSON parse error, means event.data wasn't a string or something.
+                            }
                         }
-                    }
+                    };
+                    ws.onerror = function (event) {
+                        log(`WebSocket error: ${event.code} (${event.reason})`);
+                    };
+                    ws.onclose = function (event) {
+                        log(`WebSocket closed: ${event.code} (${event.reason}), will reopen in ${RECONNECT_WAIT_MS} ms.`);
+                        window.setTimeout(realtimeConnect, RECONNECT_WAIT_MS);
+                    };
                 };
+                realtimeConnect();
             }
-
         });
-
-        // The chat topbar queries /topbar/get-unread-counts on init. This can be kludged to
-        // be compatible with StackExchange.topbar.handleRealtimeMessage and polled for
-        // status. NOTE: This sucks because get-unread-counts is stale. Keeping this code
-        // here just for reference but the websocket above works great.
-        /*
-        window.setInterval(function () {
-            $.get('/topbar/get-unread-counts', function (e) {
-                console.log(JSON.stringify(e));
-                tbframe.StackExchange.topbar.handleRealtimeMessage(JSON.stringify({
-                    'Inbox': e,
-                    'Achievements': e
-                }));
-            });
-        }, 10000);
-        */
 
     });
 
@@ -150,9 +152,12 @@
     // on the chat page changes, which I figure is a pretty good indicator that e.g.
     // the user logged out then logged in with a different account. The fkey is tracked
     // per chat server to prevent unneeded API calls when switching back and forth from
-    // multiple chat servers.
+    // multiple chat servers. Returns a promise.
     function getAccountId () {
 
+        // If user is not logged in CHAT.CURRENT_USER_ID will be 0 and there will
+        // be some errors below, but I don't see any need to handle it more gracefully
+        // right now since we still end up with a properly functioning topbar.
         return $.Deferred(function (def) {
 
             let server = window.location.host;
@@ -160,12 +165,13 @@
             let account_cached = load('account', null);
 
             if (fkey !== load(`${server}-fkey`, null) || account_cached === null) {
-                console.log('Obtaining account ID...');
+                log(`Obtaining parent profile (your chat ID is ${CHAT.CURRENT_USER_ID})...`);
                 $.get(`/users/thumbs/${CHAT.CURRENT_USER_ID}`, function (data) {
                     let a = document.createElement('a');
                     a.href = data.profileUrl;
                     let site = a.hostname;
                     let uid = /\/users\/([0-9]+)/.exec(a.pathname)[1];
+                    log(`Obtaining network ID (your parent ID is ${uid} on ${site})...`);
                     $.get(`//api.stackexchange.com/2.2/users/${uid}?order=desc&sort=reputation&site=${site}&filter=TiTab6.mdk`, function (r) {
                         if (r.items && r.items.length > 0) {
                             store('account', r.items[0].account_id);
@@ -199,6 +205,11 @@
             console.error(e);
             return def;
         }
+    }
+
+    // Helper for console.log.
+    function log (msg) {
+        console.log(`Chat Top Bar: ${msg}`);
     }
 
 })();
