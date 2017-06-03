@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.02
+// @version      1.03
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -14,8 +14,6 @@
 (function() {
     'use strict';
 
-    const WIDEN_TOPBAR = true; // true = 95% width, false = default fixed width
-    const THEME_BACKGROUND = false; // true = use chat themed background, false = default dark
     const RECONNECT_WAIT_MS = 500;
 
     // The main chat server page has a topbar and is on the same domain, load it up
@@ -27,6 +25,13 @@
 
     // Start grabbing the account ID while the frame is loading to minimize load time.
     var defAccountId = getAccountId();
+
+    // Provide a console interface for certain functionality.
+    unsafeWindow.ChatTopBar = {
+        setWiden: setWiden,
+        setThemed: setThemed,
+        forgetAccount: () => GM_setValue('account', null)
+    };
 
     // Once the frame is loaded, everything happens.
     frame.load(function () {
@@ -59,14 +64,9 @@
         // Search box ID conflicts with sidebar searchbox, breaks styling. Change it.
         topbar.find('#searchbox').attr('id', 'topbar_searchbox');
 
-        // Make topbar wider.
-        if (WIDEN_TOPBAR)
-            topbar.find('.topbar-wrapper').css('width', '95%');
-
-        // Take background from bottom area.
-        if (THEME_BACKGROUND)
-            topbar.css('background', $('#input-area').css('background'))
-                  .css('background-position-y', 'bottom'); // Nicer on sites like RPG.
+        // Initialize configurable settings.
+        setWiden();
+        setThemed();
 
         // Must wait for css to load before topbar.height() becomes valid.
         link.load(function () {
@@ -185,6 +185,49 @@
             }
 
         }).promise();
+
+    }
+
+    // Set topbar width option. True sets width to 95%, false uses default, null or
+    // undefined loads the persistent setting. Saves setting persistently.
+    function setWiden (widen) {
+
+        if (widen === null || widen === undefined)
+            widen = load('widen', true);
+        else
+            store('widen', widen);
+
+        let wrapper = $('.topbar-wrapper');
+        if (wrapper.length > 0) {
+            // First time through, store defaults.
+            if (wrapper.data('original-width') === undefined)
+                wrapper.data('original-width', wrapper.css('width'));
+            // 95% seems good, I had trouble setting fixed margins / padding.
+            wrapper.css('width', widen ? '95%' : wrapper.data('original-width'));
+        }
+
+    }
+
+    // Set topbar themed option. True uses chat theme, false uses default theme, null
+    // or undefined loads the persistent setting. Saves setting persistently.
+    function setThemed (themed) {
+
+        if (themed === null || themed === undefined)
+            themed = load('themed', false);
+        else
+            store('themed', themed);
+
+        let topbar = $('.topbar');
+        if (topbar.length > 0) {
+            // First time through, store defaults.
+            if (topbar.data('original-background') === undefined) {
+                topbar.data('original-background', topbar.css('background'));
+                topbar.data('original-background-position-y', topbar.css('background-position-y'));
+            }
+            // Take background from bottom area.
+            topbar.css('background', themed ? $('#input-area').css('background') : topbar.data('original-background'))
+                  .css('background-position-y', themed ? 'bottom' : topbar.data('original-background-position-y')); // Nicer on sites like RPG.
+        }
 
     }
 
