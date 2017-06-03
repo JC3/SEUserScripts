@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.03
+// @version      1.04
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -9,6 +9,7 @@
 // @match        *://chat.stackoverflow.com/rooms/*
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_listValues
 // ==/UserScript==
 
 (function() {
@@ -30,7 +31,10 @@
     unsafeWindow.ChatTopBar = {
         setWiden: setWiden,
         setThemed: setThemed,
-        forgetAccount: () => GM_setValue('account', null)
+        setBrightness: setBrightness,
+        setQuiet: (quiet) => store('quiet', quiet),
+        forgetAccount: () => store('account', null),
+        dumpSettings: dumpSettings
     };
 
     // Once the frame is loaded, everything happens.
@@ -67,6 +71,7 @@
         // Initialize configurable settings.
         setWiden();
         setThemed();
+        setBrightness();
 
         // Must wait for css to load before topbar.height() becomes valid.
         link.load(function () {
@@ -164,7 +169,7 @@
             let fkey = $('#fkey').val();
             let account_cached = load('account', null);
 
-            if (fkey !== load(`${server}-fkey`, null) || account_cached === null) {
+            if (fkey !== load(`fkey-${server}`, null) || account_cached === null) {
                 log(`Obtaining parent profile (your chat ID is ${CHAT.CURRENT_USER_ID})...`);
                 $.get(`/users/thumbs/${CHAT.CURRENT_USER_ID}`, function (data) {
                     let a = document.createElement('a');
@@ -175,7 +180,7 @@
                     $.get(`//api.stackexchange.com/2.2/users/${uid}?order=desc&sort=reputation&site=${site}&filter=TiTab6.mdk`, function (r) {
                         if (r.items && r.items.length > 0) {
                             store('account', r.items[0].account_id);
-                            store(`${server}-fkey`, fkey);
+                            store(`fkey-${server}`, fkey);
                             def.resolve(r.items[0].account_id);
                         }
                     });
@@ -231,6 +236,26 @@
 
     }
 
+    // Set topbar element brightness. 1.0 is no change. Null or undefined loads the
+    // persistent setting. Saves setting persistently. Brightness is *per-room*.
+    function setBrightness (brightness) {
+
+        let key = `brightness-${window.location.host}-${CHAT.CURRENT_ROOM_ID}`;
+        if (brightness === null || brightness === undefined)
+            brightness = load(key, 1.0);
+        else
+            store(key, brightness);
+
+        $('.topbar-icon, .topbar-menu-links').css('filter', `brightness(${brightness})`);
+
+    }
+
+    // Print all settings to console, for debugging.
+    function dumpSettings () {
+        for (let key of GM_listValues())
+            console.log(`${key} => ${load(key)}`);
+    }
+
     // Helper for GM_setValue.
     function store (key, value) {
         try {
@@ -252,7 +277,8 @@
 
     // Helper for console.log.
     function log (msg) {
-        console.log(`Chat Top Bar: ${msg}`);
+        if (!load('quiet', false))
+            console.log(`Chat Top Bar: ${msg}`);
     }
 
 })();
