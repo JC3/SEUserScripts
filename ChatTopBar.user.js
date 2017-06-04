@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.05
+// @version      1.06
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -10,6 +10,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_listValues
+// @grant        unsafeWindow
 // ==/UserScript==
 
 (function() {
@@ -21,7 +22,7 @@
     // in an invisible iframe.
     var frame = $('<iframe/>')
        .css('display', 'none')
-       .attr('src', `//${window.location.host}`)
+       .attr('src', '/')
        .appendTo('body');
 
     // Start grabbing the account ID while the frame is loading to minimize load time.
@@ -34,7 +35,8 @@
         setBrightness: setBrightness,
         setQuiet: (quiet) => store('quiet', quiet),
         forgetAccount: () => store('account', null),
-        dumpSettings: dumpSettings
+        dumpSettings: dumpSettings,
+        fakeUnreadCounts: fakeUnreadCounts
     };
 
     // Once the frame is loaded, everything happens.
@@ -89,10 +91,15 @@
                 width: '100%'
             }).prependTo('body');
 
-            // Make room for the topbar.
+            // Make room for the topbar. Sidebar must be made smaller so it doesn't hide behind
+            // the bottom panel.
             $('#container, #sidebar').css({
                 'margin-top': `${topbar.height()}px`
             });
+            $('#sidebar').css({
+                height: `calc(100% - ${topbar.height()}px`
+            });
+            $(unsafeWindow).trigger('resize'); // Force sidebar resize, guess SE does it dynamically.
 
         });
 
@@ -234,10 +241,13 @@
                   .css('background-position-y', themed ? 'bottom' : topbar.data('original-background-position-y')); // Nicer on sites like RPG.
         }
 
+        setBrightness();
+
     }
 
     // Set topbar element brightness. 1.0 is no change. Null or undefined loads the
-    // persistent setting. Saves setting persistently. Brightness is *per-room*.
+    // persistent setting. Saves setting persistently. Brightness is *per-room* and
+    // only has an effect when theme is enabled.
     function setBrightness (brightness) {
 
         let key = `brightness-${window.location.host}-${CHAT.CURRENT_ROOM_ID}`;
@@ -246,8 +256,17 @@
         else
             store(key, brightness);
 
-        $('.topbar-icon, .topbar-menu-links').css('filter', `brightness(${brightness})`);
+        let themed = load('themed', false);
+        $('.topbar-icon, .topbar-menu-links').css('filter', `brightness(${themed ? brightness : 1.0})`);
 
+    }
+
+    // Set notification counts, for style debugging.
+    function fakeUnreadCounts (inbox, rep) {
+        window.frames[0].StackExchange.topbar.handleRealtimeMessage(JSON.stringify({
+            'Inbox': { 'UnreadInboxCount': inbox },
+            'Achievements': { 'UnreadRepCount': rep }
+        }));
     }
 
     // Print all settings to console, for debugging.
