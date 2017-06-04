@@ -271,7 +271,7 @@
 
     // Print all settings to console, for debugging.
     function dumpSettings () {
-        for (let key of GM_listValues())
+        for (let key of GM_listValues().sort())
             console.log(`${key} => ${load(key)}`);
     }
 
