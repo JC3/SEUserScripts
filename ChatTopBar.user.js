@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.07
+// @version      1.08
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
 // @match        *://chat.stackexchange.com/rooms/*
 // @match        *://chat.stackoverflow.com/rooms/*
+// @match        */chats/join/favorite?ctbjoin
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_listValues
@@ -16,6 +17,14 @@
 
 (function() {
     'use strict';
+
+    // Auto-click the button on the favorites page if enabled. Note match rule only
+    // lets this happen if '?ctbjoin' is in URL, so we're not doing this willy nilly.
+    if (document.location.href.includes('/chats/join/favorite')) {
+        if (setRejoinOnSwitch())
+            $('input[value*="join"]').click();
+        return;
+    }
 
     const RECONNECT_WAIT_MS = 500;
     const URL_UPDATES = 'https://stackapps.com/q/7404/25350';
@@ -57,6 +66,7 @@
         setThemed: setThemed,
         setBrightness: setBrightness,
         setQuiet: setQuiet,
+        setRejoinOnSwitch: setRejoinOnSwitch,
         forgetAccount: () => store('account', null),
         forgetEverything: forgetEverything,
         dumpSettings: dumpSettings,
@@ -149,6 +159,9 @@
             hideSettingsIfOutside(e.target);
         });
 
+        // Install DOM mutation observers for modifying SE dropdown when it's loaded.
+        watchSEDropdown(topbar);
+
         // So, the chat topbar doesn't show realtime notifications (https://meta.stackexchange.com/q/296714/230261),
         // for a number of reasons. We have to re-implement this ourselves by setting up
         // a websocket and subscribing to topbar events (for which we need the user's network
@@ -238,6 +251,41 @@
 
     }
 
+    // Install hooks necessary to add chat server list to the SE dropdown, which is loaded
+    // as needed and not initially present. Be careful not to call this more than once.
+    function watchSEDropdown (topbar) {
+
+        // Readability is for the birds. Looking forward to forgetting what this does some day.
+        new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach(function (a) {
+            if (a.classList && a.classList.contains('siteSwitcher-dialog') && a.getElementsByTagName('link').length > 0) {
+                log('SE dropdown loaded.');
+                // Select insert point explicitly, ajax loader icon may still be there at this point.
+                // Also, still not sure which of the following two options I like better:
+                //let insert = $(a).find('.current-site-container').prev('.header');
+                let insert = $(a).find('#your-communities-header');
+                // Build and add the chat switcher section.
+                $('<div class="header"><h3>CHAT SERVERS</h3></div>')
+                    .insertBefore(insert);
+                $('<div class="modal-content" id="ctb-chat-servers"><ul class="my-sites"/></div>')
+                    .insertBefore(insert)
+                    .find('.my-sites')
+                    .append($('<li><a class="site-link" href="//chat.stackexchange.com"><div class="site-icon favicon favicon-stackexchange"></div> Stack Exchange Chat</a></li>'))
+                    .append($('<li><a class="site-link" href="//chat.stackoverflow.com"><div class="site-icon favicon favicon-stackoverflow"></div> Stack Overflow Chat</a></li>'))
+                    .append($('<li><a class="site-link" href="//chat.meta.stackexchange.com"><div class="site-icon favicon favicon-stackexchangemeta"></div> Meta Stack Exchange Chat</a></li>'));
+                $('#ctb-chat-servers a.site-link').each(function (_, link) {
+                    if (link.hostname == document.location.hostname)
+                        $(link).css('font-weight', 'bold');
+                    $(`<span class="rep-score"><a class="ctb-chat-switch" target="_top" data-ctb-host="${link.hostname}">switch</a></span>`).insertBefore(link);
+                });
+                setRejoinOnSwitch(); // Will set switch link hrefs.
+            }
+        }))).observe(topbar.find('.js-topbar-dialog-corral')[0], {
+            childList: true,
+            subtree: true
+        });
+
+    }
+
     // Show settings popup.
     function showSettings () {
 
@@ -248,8 +296,9 @@
                 `<div id="chattopbar-settings-dialog" title="Settings${title}">` +
                 '<label><input type="checkbox" name="themed" onchange="ChatTopBar.setThemed(this.checked)"><span>Use chat room themes</span></label>' +
                 '<label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>' +
-                '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label><hr>' +
-                '<label class="ctb-fixheight"><span>Brightness (this room only):</span></label>' +
+                '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
+                '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
+                '<hr><label class="ctb-fixheight"><span>Brightness (this room only):</span></label>' +
                 '<div class="ctb-fixheight"><div style="flex-grow:1" id="chattopbar-settings-brightness"></div></div><hr>' +
                 `<div class="ctb-fixheight"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a></div>` +
                 '</div>');
@@ -306,6 +355,7 @@
             dialog.find('[name="widen"]').prop('checked', setWiden());
             dialog.find('[name="themed"]').prop('checked', setThemed());
             dialog.find('[name="quiet"]').prop('checked', setQuiet());
+            dialog.find('[name="rejoin"]').prop('checked', setRejoinOnSwitch());
             dialog.find('#chattopbar-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
         }
@@ -331,10 +381,7 @@
     // the value of the option.
     function setWiden (widen) {
 
-        if (widen === null || widen === undefined)
-            widen = load('widen', true);
-        else
-            store('widen', widen);
+        widen = loadOrStore('widen', widen, true);
 
         let wrapper = $('.topbar-wrapper');
         if (wrapper.length > 0) {
@@ -360,10 +407,7 @@
     // the value of the option.
     function setThemed (themed) {
 
-        if (themed === null || themed === undefined)
-            themed = load('themed', false);
-        else
-            store('themed', themed);
+        themed = loadOrStore('themed', themed, false);
 
         let topbar = $('.topbar');
         if (topbar.length > 0) {
@@ -389,10 +433,7 @@
     function setBrightness (brightness) {
 
         let key = `brightness-${window.location.host}-${CHAT.CURRENT_ROOM_ID}`;
-        if (brightness === null || brightness === undefined)
-            brightness = load(key, 1.0);
-        else
-            store(key, brightness);
+        brightness = loadOrStore(key, brightness, 1.0);
 
         let themed = load('themed', false);
         $('.topbar-icon, .topbar-menu-links').css('filter', `brightness(${themed ? brightness : 1.0})`);
@@ -405,12 +446,37 @@
     // setting. Saves setting persistently. Returns the value of the option.
     function setQuiet (quiet) {
 
-        if (quiet === null || quiet === undefined)
-            quiet = load('quiet', false);
-        else
-            store('quiet', quiet);
+        return loadOrStore('quiet', quiet, false);
 
-        return quiet;
+    }
+
+    // Set rejoin option. If true then switching chat servers via 'switch' links in the
+    // SE dropdown will automatically rejoin favorite rooms, otherwise they'll just go
+    // to the main room list page. Default is false. Null or undefined loads the persistent
+    // setting. Saves setting persistently. Returns the value of the option.
+    function setRejoinOnSwitch (rejoin) {
+
+        rejoin = loadOrStore('rejoin', rejoin, false);
+
+        $('.ctb-chat-switch').each(function (_, link) {
+            link = $(link);
+            link.attr('href', rejoin ? `//${link.data('ctb-host')}/chats/join/favorite?ctbjoin` : `//${link.data('ctb-host')}`);
+        });
+
+        return rejoin;
+
+    }
+
+    // Helper for managing default settings. If value is undefined then a default is
+    // returned, otherwise the value is stored and returned.
+    function loadOrStore (key, value, def) {
+
+        if (value === null || value === undefined)
+            value = load(key, def);
+        else
+            store(key, value);
+
+        return value;
 
     }
 
