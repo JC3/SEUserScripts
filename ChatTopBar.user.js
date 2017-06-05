@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.07
+// @version      1.08
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
 // @match        *://chat.stackexchange.com/rooms/*
 // @match        *://chat.stackoverflow.com/rooms/*
+// @match        */chats/join/favorite?ctbjoin
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_listValues
@@ -16,6 +17,13 @@
 
 (function() {
     'use strict';
+
+    // Auto-click the button on the favorites page if enabled. Note match rule only
+    // lets this happen if '?ctbjoin' is in URL, so we're not doing this willy nilly.
+    if (document.location.href.includes('/chats/join/favorite')) {
+        $('input[value*="join"]').click();
+        return;
+    }
 
     const RECONNECT_WAIT_MS = 500;
     const URL_UPDATES = 'https://stackapps.com/q/7404/25350';
@@ -32,7 +40,7 @@
     var defAccountId = getAccountId();
 
     // Start loading jQuery UI dependencies at the same time, too.
-    var defJQUI = $.when(
+    var defJQUI = $('script[src*="jquery-ui"]').length > 0 ? $.when() : $.when(
         $.Deferred(function (def) {
             $('<link/>')
                 .attr('rel', 'stylesheet')
@@ -57,6 +65,9 @@
         setThemed: setThemed,
         setBrightness: setBrightness,
         setQuiet: setQuiet,
+        setShowSwitcher: setShowSwitcher,
+        setRejoinOnSwitch: setRejoinOnSwitch,
+        showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
         forgetEverything: forgetEverything,
         dumpSettings: dumpSettings,
@@ -98,6 +109,9 @@
         $('#topbar_searchbox').attr('placeholder', 'search all rooms');
         $('#searchbox').attr('placeholder', 'search room');
 
+        // Install DOM mutation observers for modifying SE dropdown when it's loaded.
+        watchSEDropdown(topbar);
+
         // Must wait for css to load before topbar.height() and other styles become valid.
         link.load(function () {
 
@@ -105,6 +119,8 @@
             setWiden();
             setThemed();
             setBrightness();
+            // setShowSwitcher() is initialized in watchSEDropdown().
+            // setRejoinOnSwitch() is initialized in watchSEDropdown().
 
             // Put settings link at bottom; we're doing this in here so that we don't make the
             // dialog available to the user before styles are loaded. Probably being paranoid.
@@ -112,6 +128,7 @@
                 $('#footer-legal')
                     .prepend(document.createTextNode(' | '))
                     .prepend($('<a href="#" id="ctb-settings-link"/>').text('topbar').click(() => (showSettings(), false)));
+                checkUpdateNotify();
             });
 
             // Put a white div behind it, easier than trying to futz with opacity component of
@@ -238,28 +255,73 @@
 
     }
 
+    // Install hooks necessary to add chat server list to the SE dropdown, which is loaded
+    // as needed and not initially present. Be careful not to call this more than once.
+    function watchSEDropdown (topbar) {
+
+        // Readability is for the birds. Looking forward to forgetting what this does some day.
+        new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach(function (a) {
+            if (a.classList && a.classList.contains('siteSwitcher-dialog') && a.getElementsByTagName('link').length > 0) {
+                log('SE dropdown loaded.');
+                // Select insert point explicitly, ajax loader icon may still be there at this point.
+                // Also, still not sure which of the following two options I like better:
+                //let insert = $(a).find('.current-site-container').prev('.header');
+                let insert = $(a).find('#your-communities-header');
+                // Build and add the chat switcher section.
+                $('<div class="header ctb-chat-switcher"><h3>CHAT SERVERS</h3></div>')
+                    .insertBefore(insert);
+                $('<div class="modal-content ctb-chat-switcher" id="ctb-chat-servers"><ul class="my-sites"/></div>')
+                    .insertBefore(insert)
+                    .find('.my-sites')
+                    .append($('<li><a class="site-link" href="//chat.stackexchange.com"><div class="site-icon favicon favicon-stackexchange"></div> Stack Exchange Chat</a></li>'))
+                    .append($('<li><a class="site-link" href="//chat.stackoverflow.com"><div class="site-icon favicon favicon-stackoverflow"></div> Stack Overflow Chat</a></li>'))
+                    .append($('<li><a class="site-link" href="//chat.meta.stackexchange.com"><div class="site-icon favicon favicon-stackexchangemeta"></div> Meta Stack Exchange Chat</a></li>'));
+                $('#ctb-chat-servers a.site-link').each(function (_, link) {
+                    if (link.hostname == document.location.hostname)
+                        $(link).css('font-weight', 'bold');
+                    $(`<span class="rep-score"><a class="ctb-chat-switch" target="_top" data-ctb-host="${link.hostname}">switch</a></span>`).insertBefore(link);
+                });
+                setRejoinOnSwitch(); // Will set switch link hrefs.
+                setShowSwitcher();
+            }
+        }))).observe(topbar.find('.js-topbar-dialog-corral')[0], {
+            childList: true,
+            subtree: true
+        });
+
+    }
+
     // Show settings popup.
     function showSettings () {
 
+        // If version updated and change log not viewed yet, show that instead.
+        if ($('#ctb-settings-link').data('updated')) {
+            showChangeLog();
+            return;
+        }
+
         // Initialize dialog first time through.
-        if ($('#chattopbar-settings-dialog').length === 0) {
+        if ($('#ctb-settings-dialog').length === 0) {
             let title = (typeof GM_info === 'undefined' ? '' : ` (${GM_info.script.version})`);
             $('body').append(
-                `<div id="chattopbar-settings-dialog" title="Settings${title}">` +
+                `<div id="ctb-settings-dialog" title="Settings${title}">` +
                 '<label><input type="checkbox" name="themed" onchange="ChatTopBar.setThemed(this.checked)"><span>Use chat room themes</span></label>' +
                 '<label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>' +
-                '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label><hr>' +
-                '<label class="ctb-fixheight"><span>Brightness (this room only):</span></label>' +
-                '<div class="ctb-fixheight"><div style="flex-grow:1" id="chattopbar-settings-brightness"></div></div><hr>' +
-                `<div class="ctb-fixheight"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a></div>` +
+                '<label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>' +
+                '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
+                '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
+                '<hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>' +
+                '<div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>' +
+                `<div class="ctb-fixheight" style="white-space:nowrap"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a>&nbsp;|&nbsp;<a href="#" id="ctb-show-log">Change Log</a></div>` +
                 '</div>');
-            let elem = $('#chattopbar-settings-dialog');
+            $('#ctb-show-log').click(() => (showChangeLog(), showSettings(), false));
+            let elem = $('#ctb-settings-dialog');
             elem.find('hr').css({'border':'0', 'border-bottom':$('#present-users').css('border-bottom')});
             elem.find('label, .ctb-fixheight').css({'display':'flex', 'align-items':'center'});
             let rowHeight = $('input[name="themed"]').closest('label').css('height');
             elem.find('.ctb-fixheight').css({'height':rowHeight, 'justify-content':'center'});
             elem.find('a').css('color', $('#sidebar-menu a').css('color')); // Because #input-area a color is too light.
-            let work = elem.find('#chattopbar-settings-brightness');
+            let work = elem.find('#ctb-settings-brightness');
             work.slider({
                 min: 0,
                 max: 200,
@@ -299,14 +361,16 @@
         }
 
         // Toggle visibility.
-        let dialog = $('#chattopbar-settings-dialog');
+        let dialog = $('#ctb-settings-dialog');
         if (dialog.dialog('isOpen')) {
             dialog.dialog('close');
         } else {
             dialog.find('[name="widen"]').prop('checked', setWiden());
             dialog.find('[name="themed"]').prop('checked', setThemed());
             dialog.find('[name="quiet"]').prop('checked', setQuiet());
-            dialog.find('#chattopbar-settings-brightness').slider('value', 100.0 * setBrightness());
+            dialog.find('[name="rejoin"]').prop('checked', setRejoinOnSwitch());
+            dialog.find('[name="switch"]').prop('checked', setShowSwitcher());
+            dialog.find('#ctb-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
         }
 
@@ -317,7 +381,7 @@
     function hideSettingsIfOutside (target) {
 
         target = $(target);
-        let dialog = $('#chattopbar-settings-dialog');
+        let dialog = $('#ctb-settings-dialog');
 
         // https://stackoverflow.com/a/11003694
         if (dialog.length > 0 && dialog.dialog('isOpen') &&
@@ -326,15 +390,133 @@
 
     }
 
+    // Check if the script has been updated and, if so, do things to make the change
+    // log visible.
+    function checkUpdateNotify () {
+
+        if (typeof GM_info === 'undefined')
+            return;
+
+        let oldVersion = load('changesViewedFor', null);
+        let newVersion = GM_info.script.version;
+        if (oldVersion === newVersion)
+            return;
+        else
+            log(`Detected update, ${oldVersion} => ${newVersion}`);
+
+        // Highlight the link; it's data property will be read by showSettings(), which
+        // will show the change log instead.
+        $('#ctb-settings-link').css({
+            background: '#0f0',
+            color: 'black'
+        }).data('updated', newVersion);
+
+        // Blinky blinky.
+        let i = window.setInterval(function () {
+            let link = $('#ctb-settings-link');
+            if (link.data('updated')) {
+                if (link.data('flasher'))
+                    link.css('background', '#0f0');
+                else
+                    link.css('background', '#ff0');
+                link.data('flasher', link.data('flasher') ? false : true);
+            } else {
+                window.clearInterval(i);
+            }
+        }, 500);
+
+    }
+
+    // Shows change log dialog.
+    function showChangeLog () {
+
+        // Clear update highlights and remember that the user viewed this.
+        if ($('#ctb-settings-link').data('updated')) {
+            store('changesViewedFor', $('#ctb-settings-link').data('updated'));
+            $('#ctb-settings-link').css({
+                background: '',
+                color: ''
+            }).data('updated', null);
+        }
+
+        if ($('#ctb-changes-dialog').length === 0) {
+            let title = (typeof GM_info === 'undefined' ? '' : ` (${GM_info.script.version})`);
+            let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
+            $('body').append(
+                `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
+                '<li class="ctb-version-item">1.08<li><ul>' +
+                '<li>• Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
+                '<li>• Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
+                '<li>• Brightness setting is now associated with the current room\'s theme rather than the room itself (so it applies to all rooms with the same theme). ' +
+                'Apologies for any reset settings (it does make a good attempt to copy them, though).' +
+                '<li>• Change log now displayed after update (when flashin "topbar" link clicked).' +
+                '<li>• <span>ChatTopBar.showChangeLog()</span> will always show the change log, too.' +
+                '<li>• <span>ChatTopBar</span> functions for additional settings added.' +
+                '<li>• Don\'t load jQuery UI if it\'s already loaded.' +
+                '</ul>' +
+                '<li class="ctb-version-item">1.07<li><ul>' +
+                '<li>• Settings dialog (accessible from "topbar" link in footer).' +
+                '<li>• Wide mode now matches right side padding instead of fixed at 95%.' +
+                '<li>• More descriptive search box placeholders.' +
+                '<li>• <span>ChatTopBar.forgetEverything</span>, for testing.</ul>' +
+                '<li class="ctb-version-item">1.06<li><ul>' +
+                '<li>• Brightness now only applied if theme enabled.' +
+                '<li>• Sidebar resized so it doesn\'t hide behind the bottom panel.' +
+                '<li>• <span>ChatTopBar.fakeUnreadCounts(inbox,rep)</span> for debugging.' +
+                '<li>• Explicit <span>unsafeWindow</span> grant.' +
+                '<li>• Sort output of <span>dumpSettings()</span>.</ul>' +
+                '<li class="ctb-version-item">1.05<li><ul>' +
+                '<li>• Per-room icon/text brightness option.' +
+                '<li>• Option to suppress console output.' +
+                '<li>• Ability to dump settings to console for testing.' +
+                '<li>• Fixed a style bug where things were happening before CSS was loaded, was sometimes causing non-themed topbar to have a white background instead of black.</ul>' +
+                '<li class="ctb-version-item">1.03<li><ul>' +
+                '<li>• <span>ChatTopBar</span> console interface for setting options.' +
+                '<li>• Widen / theme options now user-settable.' +
+                '<li>• Ability to forget cached account ID for testing.</ul>' +
+                '<li class="ctb-version-item">1.02<li><ul>' +
+                '<li>• WebSocket reconnect when connection lost.' +
+                '<li>• Beta code for themed topbar.' +
+                '<li>• Better console logging.</ul>' +
+                '<li class="ctb-version-item">1.01<li><ul>' +
+                '<li>• Realtime event handling via websocket.</ul>' +
+                '<li class="ctb-version-item">1.00<li><ul>' +
+                '<li>• Initial version.</ul>' +
+                '</ul></div>');
+            $('.ctb-version-item, .ctb-important').css({'margin-top': '1.5ex', 'font-size': '120%'});
+            $('.ctb-version-item').css({'font-weight': 'bold'});
+            $('#ctb-changes-list ul').css('margin-left', '2ex');
+            $('#ctb-changes-list span').css({'font-family': 'monospace', 'color': '#00a'});
+        }
+
+        $('#ctb-changes-dialog').dialog({
+            appendTo: '.topbar',
+            show: 100,
+            hide: 100,
+            autoOpen: true,
+            width: 500,
+            height: 300,
+            resizable: true,
+            draggable: true,
+            modal: true,
+            classes: {
+                'ui-dialog': 'topbar-dialog',
+                'ui-dialog-content': '',
+                'ui-dialog-buttonpane': '',
+                'ui-dialog-titlebar': '',
+                'ui-dialog-titlebar-close': '',
+                'ui-dialog-title': ''
+            }
+        });
+
+    }
+
     // Set topbar width option. True sets width to 95%, false uses default, null or
     // undefined loads the persistent setting. Saves setting persistently. Returns
     // the value of the option.
     function setWiden (widen) {
 
-        if (widen === null || widen === undefined)
-            widen = load('widen', true);
-        else
-            store('widen', widen);
+        widen = loadOrStore('widen', widen, true);
 
         let wrapper = $('.topbar-wrapper');
         if (wrapper.length > 0) {
@@ -360,10 +542,7 @@
     // the value of the option.
     function setThemed (themed) {
 
-        if (themed === null || themed === undefined)
-            themed = load('themed', false);
-        else
-            store('themed', themed);
+        themed = loadOrStore('themed', themed, false);
 
         let topbar = $('.topbar');
         if (topbar.length > 0) {
@@ -388,11 +567,29 @@
     // only has an effect when theme is enabled. Returns the value of the option.
     function setBrightness (brightness) {
 
-        let key = `brightness-${window.location.host}-${CHAT.CURRENT_ROOM_ID}`;
-        if (brightness === null || brightness === undefined)
-            brightness = load(key, 1.0);
-        else
-            store(key, brightness);
+        // Brightness is per-theme. Makes more sense than per-room.
+        let bgkey = /url\(['"]?([^'"]*)/.exec($('#input-area').css('background-image'));
+        bgkey = (bgkey && bgkey[1]) ||
+                $('#input-area').css('background-color') || // fall back on bg color
+                `${window.location.host}-${CHAT.CURRENT_ROOM_ID}`; // then on room id
+        let key = `brightness-${bgkey}`;
+
+        // 1.08+ uses bg image as key instead of chat room. Make a modest attempt to
+        // preserve the user's current settings by using any brightness that may have
+        // been previously set for this room as the default if none is set, and cleaning
+        // up old keys.
+        let oldkey = `brightness-${window.location.host}-${CHAT.CURRENT_ROOM_ID}`;
+        let oldbrightness = load(oldkey, null);
+        if (key !== oldkey && oldbrightness !== null) {
+            if (load(key, null) === null) {
+                store(key, oldbrightness);
+                log(`Migrated old brightness setting ${oldkey} => ${key} (${oldbrightness})`);
+            }
+            try { GM_deleteValue(oldkey); } catch (e) { console.error(e); }
+            log(`Removed obsolete brightness setting ${oldkey}`);
+        }
+
+        brightness = loadOrStore(key, brightness, 1.0);
 
         let themed = load('themed', false);
         $('.topbar-icon, .topbar-menu-links').css('filter', `brightness(${themed ? brightness : 1.0})`);
@@ -405,12 +602,48 @@
     // setting. Saves setting persistently. Returns the value of the option.
     function setQuiet (quiet) {
 
-        if (quiet === null || quiet === undefined)
-            quiet = load('quiet', false);
-        else
-            store('quiet', quiet);
+        return loadOrStore('quiet', quiet, false);
 
-        return quiet;
+    }
+
+    // Set whether or not chat server links are added to SE dropdown. Default is true.
+    // Null or undefined loads the persistent settings. Saves settings persistently.
+    // Returns the value of the option.
+    function setShowSwitcher (show) {
+
+        show = loadOrStore('showSwitcher', show, true);
+        $('.ctb-chat-switcher').toggle(show);
+        return show;
+
+    }
+
+    // Set rejoin option. If true then switching chat servers via 'switch' links in the
+    // SE dropdown will automatically rejoin favorite rooms, otherwise they'll just go
+    // to the main room list page. Default is true. Null or undefined loads the persistent
+    // setting. Saves setting persistently. Returns the value of the option.
+    function setRejoinOnSwitch (rejoin) {
+
+        rejoin = loadOrStore('rejoin', rejoin, true);
+
+        $('.ctb-chat-switch').each(function (_, link) {
+            link = $(link);
+            link.attr('href', rejoin ? `//${link.data('ctb-host')}/chats/join/favorite?ctbjoin` : `//${link.data('ctb-host')}`);
+        });
+
+        return rejoin;
+
+    }
+
+    // Helper for managing default settings. If value is undefined then a default is
+    // returned, otherwise the value is stored and returned.
+    function loadOrStore (key, value, def) {
+
+        if (value === null || value === undefined)
+            value = load(key, def);
+        else
+            store(key, value);
+
+        return value;
 
     }
 
