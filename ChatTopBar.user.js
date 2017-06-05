@@ -21,8 +21,7 @@
     // Auto-click the button on the favorites page if enabled. Note match rule only
     // lets this happen if '?ctbjoin' is in URL, so we're not doing this willy nilly.
     if (document.location.href.includes('/chats/join/favorite')) {
-        if (setRejoinOnSwitch())
-            $('input[value*="join"]').click();
+        $('input[value*="join"]').click();
         return;
     }
 
@@ -66,6 +65,7 @@
         setThemed: setThemed,
         setBrightness: setBrightness,
         setQuiet: setQuiet,
+        setShowSwitcher: setShowSwitcher,
         setRejoinOnSwitch: setRejoinOnSwitch,
         forgetAccount: () => store('account', null),
         forgetEverything: forgetEverything,
@@ -108,6 +108,9 @@
         $('#topbar_searchbox').attr('placeholder', 'search all rooms');
         $('#searchbox').attr('placeholder', 'search room');
 
+        // Install DOM mutation observers for modifying SE dropdown when it's loaded.
+        watchSEDropdown(topbar);
+
         // Must wait for css to load before topbar.height() and other styles become valid.
         link.load(function () {
 
@@ -115,6 +118,8 @@
             setWiden();
             setThemed();
             setBrightness();
+            // setShowSwitcher() is initialized in watchSEDropdown().
+            // setRejoinOnSwitch() is initialized in watchSEDropdown().
 
             // Put settings link at bottom; we're doing this in here so that we don't make the
             // dialog available to the user before styles are loaded. Probably being paranoid.
@@ -158,9 +163,6 @@
             tbframe.StackExchange.topbar.hideAll();
             hideSettingsIfOutside(e.target);
         });
-
-        // Install DOM mutation observers for modifying SE dropdown when it's loaded.
-        watchSEDropdown(topbar);
 
         // So, the chat topbar doesn't show realtime notifications (https://meta.stackexchange.com/q/296714/230261),
         // for a number of reasons. We have to re-implement this ourselves by setting up
@@ -264,9 +266,9 @@
                 //let insert = $(a).find('.current-site-container').prev('.header');
                 let insert = $(a).find('#your-communities-header');
                 // Build and add the chat switcher section.
-                $('<div class="header"><h3>CHAT SERVERS</h3></div>')
+                $('<div class="header ctb-chat-switcher"><h3>CHAT SERVERS</h3></div>')
                     .insertBefore(insert);
-                $('<div class="modal-content" id="ctb-chat-servers"><ul class="my-sites"/></div>')
+                $('<div class="modal-content ctb-chat-switcher" id="ctb-chat-servers"><ul class="my-sites"/></div>')
                     .insertBefore(insert)
                     .find('.my-sites')
                     .append($('<li><a class="site-link" href="//chat.stackexchange.com"><div class="site-icon favicon favicon-stackexchange"></div> Stack Exchange Chat</a></li>'))
@@ -278,6 +280,7 @@
                     $(`<span class="rep-score"><a class="ctb-chat-switch" target="_top" data-ctb-host="${link.hostname}">switch</a></span>`).insertBefore(link);
                 });
                 setRejoinOnSwitch(); // Will set switch link hrefs.
+                setShowSwitcher();
             }
         }))).observe(topbar.find('.js-topbar-dialog-corral')[0], {
             childList: true,
@@ -290,25 +293,26 @@
     function showSettings () {
 
         // Initialize dialog first time through.
-        if ($('#chattopbar-settings-dialog').length === 0) {
+        if ($('#ctb-settings-dialog').length === 0) {
             let title = (typeof GM_info === 'undefined' ? '' : ` (${GM_info.script.version})`);
             $('body').append(
-                `<div id="chattopbar-settings-dialog" title="Settings${title}">` +
+                `<div id="ctb-settings-dialog" title="Settings${title}">` +
                 '<label><input type="checkbox" name="themed" onchange="ChatTopBar.setThemed(this.checked)"><span>Use chat room themes</span></label>' +
                 '<label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>' +
                 '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
+                '<label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>' +
                 '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
                 '<hr><label class="ctb-fixheight"><span>Brightness (this room only):</span></label>' +
-                '<div class="ctb-fixheight"><div style="flex-grow:1" id="chattopbar-settings-brightness"></div></div><hr>' +
+                '<div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>' +
                 `<div class="ctb-fixheight"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a></div>` +
                 '</div>');
-            let elem = $('#chattopbar-settings-dialog');
+            let elem = $('#ctb-settings-dialog');
             elem.find('hr').css({'border':'0', 'border-bottom':$('#present-users').css('border-bottom')});
             elem.find('label, .ctb-fixheight').css({'display':'flex', 'align-items':'center'});
             let rowHeight = $('input[name="themed"]').closest('label').css('height');
             elem.find('.ctb-fixheight').css({'height':rowHeight, 'justify-content':'center'});
             elem.find('a').css('color', $('#sidebar-menu a').css('color')); // Because #input-area a color is too light.
-            let work = elem.find('#chattopbar-settings-brightness');
+            let work = elem.find('#ctb-settings-brightness');
             work.slider({
                 min: 0,
                 max: 200,
@@ -348,7 +352,7 @@
         }
 
         // Toggle visibility.
-        let dialog = $('#chattopbar-settings-dialog');
+        let dialog = $('#ctb-settings-dialog');
         if (dialog.dialog('isOpen')) {
             dialog.dialog('close');
         } else {
@@ -356,7 +360,8 @@
             dialog.find('[name="themed"]').prop('checked', setThemed());
             dialog.find('[name="quiet"]').prop('checked', setQuiet());
             dialog.find('[name="rejoin"]').prop('checked', setRejoinOnSwitch());
-            dialog.find('#chattopbar-settings-brightness').slider('value', 100.0 * setBrightness());
+            dialog.find('[name="switch"]').prop('checked', setShowSwitcher());
+            dialog.find('#ctb-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
         }
 
@@ -367,7 +372,7 @@
     function hideSettingsIfOutside (target) {
 
         target = $(target);
-        let dialog = $('#chattopbar-settings-dialog');
+        let dialog = $('#ctb-settings-dialog');
 
         // https://stackoverflow.com/a/11003694
         if (dialog.length > 0 && dialog.dialog('isOpen') &&
@@ -450,13 +455,24 @@
 
     }
 
+    // Set whether or not chat server links are added to SE dropdown. Default is true.
+    // Null or undefined loads the persistent settings. Saves settings persistently.
+    // Returns the value of the option.
+    function setShowSwitcher (show) {
+
+        show = loadOrStore('showSwitcher', show, true);
+        $('.ctb-chat-switcher').toggle(show);
+        return show;
+
+    }
+
     // Set rejoin option. If true then switching chat servers via 'switch' links in the
     // SE dropdown will automatically rejoin favorite rooms, otherwise they'll just go
-    // to the main room list page. Default is false. Null or undefined loads the persistent
+    // to the main room list page. Default is true. Null or undefined loads the persistent
     // setting. Saves setting persistently. Returns the value of the option.
     function setRejoinOnSwitch (rejoin) {
 
-        rejoin = loadOrStore('rejoin', rejoin, false);
+        rejoin = loadOrStore('rejoin', rejoin, true);
 
         $('.ctb-chat-switch').each(function (_, link) {
             link = $(link);
