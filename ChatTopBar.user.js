@@ -572,6 +572,7 @@
         bgkey = (bgkey && bgkey[1]) ||
                 $('#input-area').css('background-color') || // fall back on bg color
                 `${window.location.host}-${CHAT.CURRENT_ROOM_ID}`; // then on room id
+        bgkey = bgkey.replace(/^https?:\/\//, '');
         let key = `brightness-${bgkey}`;
 
         // 1.08+ uses bg image as key instead of chat room. Make a modest attempt to
