@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.08-dev5
+// @version      1.08-dev6
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -310,7 +310,7 @@
                 '<label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>' +
                 '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
                 '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
-                '<hr><label class="ctb-fixheight"><span>Brightness (this room only):</span></label>' +
+                '<hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>' +
                 '<div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>' +
                 `<div class="ctb-fixheight" style="white-space:nowrap"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a>&nbsp;|&nbsp;<a href="#" id="ctb-show-log">Change Log</a></div>` +
                 '</div>');
@@ -446,9 +446,12 @@
                 '<li class="ctb-version-item">1.08<li><ul>' +
                 '<li>• Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
                 '<li>• Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
+                '<li>• Brightness setting is now associated with the current room\'s theme rather than the room itself (so it applies to all rooms with the same theme). ' +
+                'Apologies for any reset settings (it does make a good attempt to copy them, though).' +
                 '<li>• Change log now displayed after update (when flashin "topbar" link clicked).' +
                 '<li>• <span>ChatTopBar.showChangeLog()</span> will always show the change log, too.' +
                 '<li>• <span>ChatTopBar</span> functions for additional settings added.' +
+                '<li>• Don\'t load jQuery UI if it\'s already loaded.' +
                 '</ul>' +
                 '<li class="ctb-version-item">1.07<li><ul>' +
                 '<li>• Settings dialog (accessible from "topbar" link in footer).' +
@@ -563,7 +566,28 @@
     // only has an effect when theme is enabled. Returns the value of the option.
     function setBrightness (brightness) {
 
-        let key = `brightness-${window.location.host}-${CHAT.CURRENT_ROOM_ID}`;
+        // Brightness is per-theme. Makes more sense than per-room.
+        let bgkey = /url\(['"]?([^'"]*)/.exec($('#input-area').css('background-image'));
+        bgkey = (bgkey && bgkey[1]) ||
+                $('#input-area').css('background-color') || // fall back on bg color
+                `${window.location.host}-${CHAT.CURRENT_ROOM_ID}`; // then on room id
+        let key = `brightness-${bgkey}`;
+
+        // 1.08+ uses bg image as key instead of chat room. Make a modest attempt to
+        // preserve the user's current settings by using any brightness that may have
+        // been previously set for this room as the default if none is set, and cleaning
+        // up old keys.
+        let oldkey = `brightness-${window.location.host}-${CHAT.CURRENT_ROOM_ID}`;
+        let oldbrightness = load(oldkey, null);
+        if (key !== oldkey && oldbrightness !== null) {
+            if (load(key, null) === null) {
+                store(key, oldbrightness);
+                log(`Migrated old brightness setting ${oldkey} => ${key} (${oldbrightness})`);
+            }
+            try { GM_deleteValue(oldkey); } catch (e) { console.error(e); }
+            log(`Removed obsolete brightness setting ${oldkey}`);
+        }
+
         brightness = loadOrStore(key, brightness, 1.0);
 
         let themed = load('themed', false);
