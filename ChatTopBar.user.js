@@ -441,8 +441,9 @@
 
         if ($('#ctb-changes-dialog').length === 0) {
             let title = (typeof GM_info === 'undefined' ? '' : ` (${GM_info.script.version})`);
+            let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
             $('body').append(
-                `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!</div><ul id="ctb-changes-list">` +
+                `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
                 '<li class="ctb-version-item">1.08<li><ul>' +
                 '<li>• Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
                 '<li>• Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
