@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.08-dev4
+// @version      1.08-dev5
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -409,6 +409,20 @@
             background: '#0f0',
             color: 'black'
         }).data('updated', newVersion);
+
+        // Blinky blinky.
+        let i = window.setInterval(function () {
+            let link = $('#ctb-settings-link');
+            if (link.data('updated')) {
+                if (link.data('flasher'))
+                    link.css('background', '#0f0');
+                else
+                    link.css('background', '#ff0');
+                link.data('flasher', link.data('flasher') ? false : true);
+            } else {
+                window.clearInterval(i);
+            }
+        }, 500);
 
     }
 
