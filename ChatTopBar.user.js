@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.08
+// @version      1.08-dev3
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -299,9 +299,9 @@
                 `<div id="ctb-settings-dialog" title="Settings${title}">` +
                 '<label><input type="checkbox" name="themed" onchange="ChatTopBar.setThemed(this.checked)"><span>Use chat room themes</span></label>' +
                 '<label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>' +
-                '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
                 '<label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>' +
                 '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
+                '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
                 '<hr><label class="ctb-fixheight"><span>Brightness (this room only):</span></label>' +
                 '<div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>' +
                 `<div class="ctb-fixheight"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a></div>` +
