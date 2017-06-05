@@ -258,9 +258,7 @@
             elem.find('label, .ctb-fixheight').css({'display':'flex', 'align-items':'center'});
             let rowHeight = $('input[name="themed"]').closest('label').css('height');
             elem.find('.ctb-fixheight').css({'height':rowHeight, 'justify-content':'center'});
-            elem.find('a').css({
-                'color': $('#sidebar-menu a').css('color')
-            });
+            elem.find('a').css('color', $('#sidebar-menu a').css('color')); // Because #input-area a color is too light.
             let work = elem.find('#chattopbar-settings-brightness');
             work.slider({
                 min: 0,
