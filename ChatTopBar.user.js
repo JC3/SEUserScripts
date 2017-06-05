@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.08-dev3
+// @version      1.08-dev4
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -40,7 +40,7 @@
     var defAccountId = getAccountId();
 
     // Start loading jQuery UI dependencies at the same time, too.
-    var defJQUI = $.when(
+    var defJQUI = $('script[src*="jquery-ui"]').length > 0 ? $.when() : $.when(
         $.Deferred(function (def) {
             $('<link/>')
                 .attr('rel', 'stylesheet')
@@ -67,6 +67,7 @@
         setQuiet: setQuiet,
         setShowSwitcher: setShowSwitcher,
         setRejoinOnSwitch: setRejoinOnSwitch,
+        showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
         forgetEverything: forgetEverything,
         dumpSettings: dumpSettings,
@@ -127,6 +128,7 @@
                 $('#footer-legal')
                     .prepend(document.createTextNode(' | '))
                     .prepend($('<a href="#" id="ctb-settings-link"/>').text('topbar').click(() => (showSettings(), false)));
+                checkUpdateNotify();
             });
 
             // Put a white div behind it, easier than trying to futz with opacity component of
@@ -292,6 +294,12 @@
     // Show settings popup.
     function showSettings () {
 
+        // If version updated and change log not viewed yet, show that instead.
+        if ($('#ctb-settings-link').data('updated')) {
+            showChangeLog();
+            return;
+        }
+
         // Initialize dialog first time through.
         if ($('#ctb-settings-dialog').length === 0) {
             let title = (typeof GM_info === 'undefined' ? '' : ` (${GM_info.script.version})`);
@@ -378,6 +386,109 @@
         if (dialog.length > 0 && dialog.dialog('isOpen') &&
             !target.is('.ui-dialog') && target.closest('.ui-dialog').length === 0)
             dialog.dialog('close');
+
+    }
+
+    // Check if the script has been updated and, if so, do things to make the change
+    // log visible.
+    function checkUpdateNotify () {
+
+        if (typeof GM_info === 'undefined')
+            return;
+
+        let oldVersion = load('changesViewedFor', null);
+        let newVersion = GM_info.script.version;
+        if (oldVersion === newVersion)
+            return;
+        else
+            log(`Detected update, ${oldVersion} => ${newVersion}`);
+
+        // Highlight the link; it's data property will be read by showSettings(), which
+        // will show the change log instead.
+        $('#ctb-settings-link').css({
+            background: '#0f0',
+            color: 'black'
+        }).data('updated', newVersion);
+
+    }
+
+    // Shows change log dialog.
+    function showChangeLog () {
+
+        // Clear update highlights and remember that the user viewed this.
+        if ($('#ctb-settings-link').data('updated')) {
+            store('changesViewedFor', $('#ctb-settings-link').data('updated'));
+            $('#ctb-settings-link').css({
+                background: '',
+                color: ''
+            }).data('updated', null);
+        }
+
+        if ($('#ctb-changes-dialog').length === 0) {
+            let title = (typeof GM_info === 'undefined' ? '' : ` (${GM_info.script.version})`);
+            $('body').append(
+                `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!</div><ul id="ctb-changes-list">` +
+                '<li class="ctb-version-item">1.08<li><ul>' +
+                '<li>• Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
+                '<li>• Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
+                '<li>• Change log now displayed after update (when flashin "topbar" link clicked).' +
+                '<li>• <span>ChatTopBar.showChangeLog()</span> will always show the change log, too.' +
+                '<li>• <span>ChatTopBar</span> functions for additional settings added.' +
+                '</ul>' +
+                '<li class="ctb-version-item">1.07<li><ul>' +
+                '<li>• Settings dialog (accessible from "topbar" link in footer).' +
+                '<li>• Wide mode now matches right side padding instead of fixed at 95%.' +
+                '<li>• More descriptive search box placeholders.' +
+                '<li>• <span>ChatTopBar.forgetEverything</span>, for testing.</ul>' +
+                '<li class="ctb-version-item">1.06<li><ul>' +
+                '<li>• Brightness now only applied if theme enabled.' +
+                '<li>• Sidebar resized so it doesn\'t hide behind the bottom panel.' +
+                '<li>• <span>ChatTopBar.fakeUnreadCounts(inbox,rep)</span> for debugging.' +
+                '<li>• Explicit <span>unsafeWindow</span> grant.' +
+                '<li>• Sort output of <span>dumpSettings()</span>.</ul>' +
+                '<li class="ctb-version-item">1.05<li><ul>' +
+                '<li>• Per-room icon/text brightness option.' +
+                '<li>• Option to suppress console output.' +
+                '<li>• Ability to dump settings to console for testing.' +
+                '<li>• Fixed a style bug where things were happening before CSS was loaded, was sometimes causing non-themed topbar to have a white background instead of black.</ul>' +
+                '<li class="ctb-version-item">1.03<li><ul>' +
+                '<li>• <span>ChatTopBar</span> console interface for setting options.' +
+                '<li>• Widen / theme options now user-settable.' +
+                '<li>• Ability to forget cached account ID for testing.</ul>' +
+                '<li class="ctb-version-item">1.02<li><ul>' +
+                '<li>• WebSocket reconnect when connection lost.' +
+                '<li>• Beta code for themed topbar.' +
+                '<li>• Better console logging.</ul>' +
+                '<li class="ctb-version-item">1.01<li><ul>' +
+                '<li>• Realtime event handling via websocket.</ul>' +
+                '<li class="ctb-version-item">1.00<li><ul>' +
+                '<li>• Initial version.</ul>' +
+                '</ul></div>');
+            $('.ctb-version-item, .ctb-important').css({'margin-top': '1.5ex', 'font-size': '120%'});
+            $('.ctb-version-item').css({'font-weight': 'bold'});
+            $('#ctb-changes-list ul').css('margin-left', '2ex');
+            $('#ctb-changes-list span').css({'font-family': 'monospace', 'color': '#00a'});
+        }
+
+        $('#ctb-changes-dialog').dialog({
+            appendTo: '.topbar',
+            show: 100,
+            hide: 100,
+            autoOpen: true,
+            width: 500,
+            height: 300,
+            resizable: true,
+            draggable: true,
+            modal: true,
+            classes: {
+                'ui-dialog': 'topbar-dialog',
+                'ui-dialog-content': '',
+                'ui-dialog-buttonpane': '',
+                'ui-dialog-titlebar': '',
+                'ui-dialog-titlebar-close': '',
+                'ui-dialog-title': ''
+            }
+        });
 
     }
 
