@@ -312,8 +312,9 @@
                 '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
                 '<hr><label class="ctb-fixheight"><span>Brightness (this room only):</span></label>' +
                 '<div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>' +
-                `<div class="ctb-fixheight"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a></div>` +
+                `<div class="ctb-fixheight" style="white-space:nowrap"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a>&nbsp;|&nbsp;<a href="#" id="ctb-show-log">Change Log</a></div>` +
                 '</div>');
+            $('#ctb-show-log').click(() => (showChangeLog(), showSettings(), false));
             let elem = $('#ctb-settings-dialog');
             elem.find('hr').css({'border':'0', 'border-bottom':$('#present-users').css('border-bottom')});
             elem.find('label, .ctb-fixheight').css({'display':'flex', 'align-items':'center'});
