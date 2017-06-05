@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.06
+// @version      1.07
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -10,6 +10,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_listValues
+// @grant        GM_deleteValue
 // @grant        unsafeWindow
 // ==/UserScript==
 
@@ -17,6 +18,8 @@
     'use strict';
 
     const RECONNECT_WAIT_MS = 500;
+    const URL_UPDATES = 'https://stackapps.com/q/7404/25350';
+    const URL_MORE = 'https://stackapps.com/search?tab=active&q=user%3a25350%20is%3aq%20%5bscript%5d%20';
 
     // The main chat server page has a topbar and is on the same domain, load it up
     // in an invisible iframe.
@@ -28,13 +31,34 @@
     // Start grabbing the account ID while the frame is loading to minimize load time.
     var defAccountId = getAccountId();
 
-    // Provide a console interface for certain functionality.
+    // Start loading jQuery UI dependencies at the same time, too.
+    var defJQUI = $.when(
+        $.Deferred(function (def) {
+            $('<link/>')
+                .attr('rel', 'stylesheet')
+                .attr('href', '//ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css')
+                .appendTo('head')
+                .load(def.resolve);
+        }),
+        $.Deferred(function (def) {
+            // jQuery hates adding script tags (https://stackoverflow.com/q/610995)
+            let s = document.createElement('script');
+            s.src = '//ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js';
+            s.onload = def.resolve;
+            document.head.appendChild(s);
+        })
+    );
+
+    // Provide a console interface for certain functionality. (TBD: Should I be paranoid
+    // about this and not do it until *after* frame and styles are loaded? Or maybe just
+    // don't expose settings change methods any more since there's a dialog now? Hmm...)
     unsafeWindow.ChatTopBar = {
         setWiden: setWiden,
         setThemed: setThemed,
         setBrightness: setBrightness,
-        setQuiet: (quiet) => store('quiet', quiet),
+        setQuiet: setQuiet,
         forgetAccount: () => store('account', null),
+        forgetEverything: forgetEverything,
         dumpSettings: dumpSettings,
         fakeUnreadCounts: fakeUnreadCounts
     };
@@ -70,6 +94,10 @@
         // Search box ID conflicts with sidebar searchbox, breaks styling. Change it.
         topbar.find('#searchbox').attr('id', 'topbar_searchbox');
 
+        // Make search box placeholders a little more accurate (todo: localize?).
+        $('#topbar_searchbox').attr('placeholder', 'search all rooms');
+        $('#searchbox').attr('placeholder', 'search room');
+
         // Must wait for css to load before topbar.height() and other styles become valid.
         link.load(function () {
 
@@ -77,6 +105,14 @@
             setWiden();
             setThemed();
             setBrightness();
+
+            // Put settings link at bottom; we're doing this in here so that we don't make the
+            // dialog available to the user before styles are loaded. Probably being paranoid.
+            defJQUI.then(function () {
+                $('#footer-legal')
+                    .prepend(document.createTextNode(' | '))
+                    .prepend($('<a href="#" id="ctb-settings-link"/>').text('topbar').click(() => (showSettings(), false)));
+            });
 
             // Put a white div behind it, easier than trying to futz with opacity component of
             // background color.
@@ -103,12 +139,14 @@
 
         });
 
-        // Hide topbar dropdowns on click (the SE JS object is in the frame).
-        $(window).click(function () {
+        // Hide topbar dropdowns (and settings dialog) on click (the SE JS object is in the frame).
+        $(window).click(function (e) {
             tbframe.StackExchange.topbar.hideAll();
+            hideSettingsIfOutside(e.target);
         });
-        $('.avatar, .action-link, #room-menu').click(function () {
+        $('.avatar, .action-link, #room-menu').click(function (e) {
             tbframe.StackExchange.topbar.hideAll();
+            hideSettingsIfOutside(e.target);
         });
 
         // So, the chat topbar doesn't show realtime notifications (https://meta.stackexchange.com/q/296714/230261),
@@ -200,8 +238,99 @@
 
     }
 
+    // Show settings popup.
+    function showSettings () {
+
+        // Initialize dialog first time through.
+        if ($('#chattopbar-settings-dialog').length === 0) {
+            let title = (typeof GM_info === 'undefined' ? '' : ` (${GM_info.script.version})`);
+            $('body').append(
+                `<div id="chattopbar-settings-dialog" title="Settings${title}">` +
+                '<label><input type="checkbox" name="themed" onchange="ChatTopBar.setThemed(this.checked)"><span>Use chat room themes</span></label>' +
+                '<label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>' +
+                '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label><hr>' +
+                '<label class="ctb-fixheight"><span>Brightness (this room only):</span></label>' +
+                '<div class="ctb-fixheight"><div style="flex-grow:1" id="chattopbar-settings-brightness"></div></div><hr>' +
+                `<div class="ctb-fixheight"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a></div>` +
+                '</div>');
+            let elem = $('#chattopbar-settings-dialog');
+            elem.find('hr').css({'border':'0', 'border-bottom':$('#present-users').css('border-bottom')});
+            elem.find('label, .ctb-fixheight').css({'display':'flex', 'align-items':'center'});
+            let rowHeight = $('input[name="themed"]').closest('label').css('height');
+            elem.find('.ctb-fixheight').css({'height':rowHeight, 'justify-content':'center'});
+            elem.find('a').css({
+                'color': $('#sidebar-menu a').css('color')
+            });
+            let work = elem.find('#chattopbar-settings-brightness');
+            work.slider({
+                min: 0,
+                max: 200,
+                value: 100,
+                slide: (_,ui) => setBrightness(ui.value / 100.0),
+                classes: {
+                    'ui-slider': '',
+                    'ui-slider-handle': '',
+                    'ui-slider-range': ''
+                }
+            });
+            let sliderMargin = work.find('.ui-slider-handle').css('width');
+            work.css('margin', `0 calc(${sliderMargin} / 2)`);
+            elem.dialog({
+                appendTo: '#input-area', // Body can scroll; this will keep us fixed.
+                show: 100,
+                hide: 100,
+                autoOpen: false,
+                width: 'auto',
+                height: 'auto',
+                resizable: false,
+                draggable: false,
+                position: {
+                    my: 'center bottom',
+                    at: 'center top',
+                    of: '#ctb-settings-link'
+                },
+                classes: {
+                    'ui-dialog': 'topbar-dialog',
+                    'ui-dialog-content': '',
+                    'ui-dialog-buttonpane': '',
+                    'ui-dialog-titlebar': '',
+                    'ui-dialog-titlebar-close': '',
+                    'ui-dialog-title': ''
+                }
+            });
+        }
+
+        // Toggle visibility.
+        let dialog = $('#chattopbar-settings-dialog');
+        if (dialog.dialog('isOpen')) {
+            dialog.dialog('close');
+        } else {
+            dialog.find('[name="widen"]').prop('checked', setWiden());
+            dialog.find('[name="themed"]').prop('checked', setThemed());
+            dialog.find('[name="quiet"]').prop('checked', setQuiet());
+            dialog.find('#chattopbar-settings-brightness').slider('value', 100.0 * setBrightness());
+            dialog.dialog('open');
+        }
+
+    }
+
+    // Hide settings dialog if target element is outside the dialog. Used when
+    // processing global mouse click events.
+    function hideSettingsIfOutside (target) {
+
+        target = $(target);
+        let dialog = $('#chattopbar-settings-dialog');
+
+        // https://stackoverflow.com/a/11003694
+        if (dialog.length > 0 && dialog.dialog('isOpen') &&
+            !target.is('.ui-dialog') && target.closest('.ui-dialog').length === 0)
+            dialog.dialog('close');
+
+    }
+
     // Set topbar width option. True sets width to 95%, false uses default, null or
-    // undefined loads the persistent setting. Saves setting persistently.
+    // undefined loads the persistent setting. Saves setting persistently. Returns
+    // the value of the option.
     function setWiden (widen) {
 
         if (widen === null || widen === undefined)
@@ -214,14 +343,23 @@
             // First time through, store defaults.
             if (wrapper.data('original-width') === undefined)
                 wrapper.data('original-width', wrapper.css('width'));
-            // 95% seems good, I had trouble setting fixed margins / padding.
-            wrapper.css('width', widen ? '95%' : wrapper.data('original-width'));
+            // Match the right side padding for wide mode, lines up nice.
+            if (widen) {
+                let r1 = $('#sidebar').css('padding-right');
+                let r2 = $('#info').css('padding-right');
+                wrapper.css('width', `calc(100% - 2 * ( ${r1} + ${r2} ) )`);
+            } else {
+                wrapper.css('width', wrapper.data('original-width'));
+            }
         }
+
+        return widen;
 
     }
 
     // Set topbar themed option. True uses chat theme, false uses default theme, null
-    // or undefined loads the persistent setting. Saves setting persistently.
+    // or undefined loads the persistent setting. Saves setting persistently. Returns
+    // the value of the option.
     function setThemed (themed) {
 
         if (themed === null || themed === undefined)
@@ -243,11 +381,13 @@
 
         setBrightness();
 
+        return themed;
+
     }
 
     // Set topbar element brightness. 1.0 is no change. Null or undefined loads the
     // persistent setting. Saves setting persistently. Brightness is *per-room* and
-    // only has an effect when theme is enabled.
+    // only has an effect when theme is enabled. Returns the value of the option.
     function setBrightness (brightness) {
 
         let key = `brightness-${window.location.host}-${CHAT.CURRENT_ROOM_ID}`;
@@ -258,6 +398,21 @@
 
         let themed = load('themed', false);
         $('.topbar-icon, .topbar-menu-links').css('filter', `brightness(${themed ? brightness : 1.0})`);
+
+        return brightness;
+
+    }
+
+    // Set quiet mode option. Default is false. Null or undefined loads the persistent
+    // setting. Saves setting persistently. Returns the value of the option.
+    function setQuiet (quiet) {
+
+        if (quiet === null || quiet === undefined)
+            quiet = load('quiet', false);
+        else
+            store('quiet', quiet);
+
+        return quiet;
 
     }
 
@@ -273,6 +428,19 @@
     function dumpSettings () {
         for (let key of GM_listValues().sort())
             console.log(`${key} => ${load(key)}`);
+    }
+
+    // Reset all settings.
+    function forgetEverything (noreload) {
+        for (let key of GM_listValues()) {
+            try {
+                GM_deleteValue(key);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+        if (!noreload)
+            document.location.reload();
     }
 
     // Helper for GM_setValue.
@@ -296,7 +464,7 @@
 
     // Helper for console.log.
     function log (msg) {
-        if (!load('quiet', false))
+        if (!setQuiet())
             console.log(`Chat Top Bar: ${msg}`);
     }
 
