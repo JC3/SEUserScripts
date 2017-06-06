@@ -145,10 +145,10 @@
 
         if ($(`.multichat[data-roomid="${roomid}"]`).length === 0) {
             let room = $('<div/>')
-            .addClass('multichat')
-            .attr('data-roomid', roomid)
-            .attr('title', `Room #${roomid} (${server})`)
-            .appendTo('body');
+                .addClass('multichat')
+                .attr('data-roomid', roomid)
+                .attr('title', `Room #${roomid} (${server})`)
+                .appendTo('body');
             room.dialog({
                 appendTo: 'body',
                 width: target.width || 1000,
@@ -274,9 +274,9 @@
         // 'attic' is where I'm putting stuff I want to remove but that is necessary for
         // SE's scripts to function properly.
         let attic = $('<div/>')
-        .css('display', 'none')
-        .attr('id', 'multichat-attic')
-        .appendTo(doc.find('body'));
+            .css('display', 'none')
+            .attr('id', 'multichat-attic')
+            .appendTo(doc.find('body'));
         doc.find('#about-room').appendTo(attic); // Needed when showing room menu.
         doc.find('#roomname').appendTo(attic);   // Needed when showing room menu.
         //doc.find('#room-tags').appendTo(attic);  // Needed by favorite button.
@@ -352,12 +352,12 @@
         // (description + room controls) up to a full-width header bar.
         doc.find('#info').attr('id', 'info-trash');
         let info = $('<div/>')
-        .attr('id', 'info')
-        .append(doc.find('#roomdesc').css('flex-grow', '1'))
-        .append(doc.find('#toggle-favorite').css('flex-shrink', '0'))
-        .append(doc.find('#sound').css('flex-shrink', '0'))
-        .append(doc.find('#room-menu').css('flex-shrink', '0'))
-        .prependTo(doc.find('#sidebar-content'));
+            .attr('id', 'info')
+            .append(doc.find('#roomdesc').css('flex-grow', '1'))
+            .append(doc.find('#toggle-favorite').css('flex-shrink', '0'))
+            .append(doc.find('#sound').css('flex-shrink', '0'))
+            .append(doc.find('#room-menu').css('flex-shrink', '0'))
+            .prependTo(doc.find('#sidebar-content'));
         doc.find('#info-trash').remove();
         info.prependTo(doc.find('body')).css({
             'position': 'fixed',
