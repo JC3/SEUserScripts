@@ -25,6 +25,18 @@
         return;
     }
 
+    // Don't add the top bar if we're in an iframe. This is only here to make this
+    // compatible with some other scripts I'm working on.
+    try {
+        if (window.self !== window.top && !setRunInFrame()) {
+            log('Not running in iframe', true);
+            return;
+        }
+    } catch (e) {
+        // If browser blocked access to window.top or something, just run. Better to
+        // run by accident than not run by accident.
+    }
+
     const RECONNECT_WAIT_MS = 500;
     const URL_UPDATES = 'https://stackapps.com/q/7404/25350';
     const URL_MORE = 'https://stackapps.com/search?tab=active&q=user%3a25350%20is%3aq%20%5bscript%5d%20';
@@ -67,6 +79,7 @@
         setQuiet: setQuiet,
         setShowSwitcher: setShowSwitcher,
         setRejoinOnSwitch: setRejoinOnSwitch,
+        setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
         forgetEverything: forgetEverything,
@@ -635,6 +648,15 @@
 
     }
 
+    // Set whether or not the topbar loads in an iframe. Default is false. Null or
+    // undefined loads the persistent setting. Saves setting persistently. Returns the
+    // value of the option.
+    function setRunInFrame (run) {
+
+        return loadOrStore('runInFrame', run, false);
+
+    }
+
     // Helper for managing default settings. If value is undefined then a default is
     // returned, otherwise the value is stored and returned.
     function loadOrStore (key, value, def) {
@@ -695,8 +717,8 @@
     }
 
     // Helper for console.log.
-    function log (msg) {
-        if (!setQuiet())
+    function log (msg, important) {
+        if (important || !setQuiet())
             console.log(`Chat Top Bar: ${msg}`);
     }
 
