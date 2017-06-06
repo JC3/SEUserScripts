@@ -1,17 +1,40 @@
 // ==UserScript==
 // @name         Multi Chat
 // @namespace    http://stackexchange.com/users/305991/jason-c
-// @version      0.02-alpha
+// @version      0.03-alpha
 // @description  Multiple chat rooms in one window.
 // @author       Jason C
-// @match        *://chat.stackoverflow.com/multichat
-// @match        *://chat.stackexchange.com/multichat
-// @match        *://chat.meta.stackexchange.com/multichat
+// @include      /^https?:\/\/chat.stackoverflow.com\/(multichat)?(\?.*)?$/
+// @include      /^https?:\/\/chat.stackexchange.com\/(multichat)?(\?.*)?$/
+// @include      /^https?:\/\/chat.meta.stackexchange.com\/(multichat)?(\?.*)?$/
 // @grant        unsafeWindow
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_deleteValue
+// @grant        GM_listValues
 // ==/UserScript==
 
 (function() {
     'use strict';
+
+    // TODO:
+    // - monitor and transform chat room links
+    // - monitor div.notification pop-ups and if "you have been mentioned in a room
+    //     you aren't currently in" appears for a room open in another dialog, remove it.
+    // - window arrangement.
+
+    // Add a topbar link on the main chat page. Convenient because since /multichat gets
+    // a 404 from SE's servers, some browser don't remember it in the history and so the
+    // autocomplete doesn't work in the address bar. This makes multichat slightly more
+    // convenient to access.
+    if (!window.location.pathname.startsWith('/multichat')) {
+        $('<a/>')
+            .attr('href', `https://${window.location.hostname}/multichat`)
+            .attr('title', 'multichat')
+            .text('multichat')
+            .prependTo('.topbar-menu-links');
+        return;
+    }
 
     var baseTitle;
     switch (window.location.hostname) {
@@ -22,6 +45,12 @@
 
     unsafeWindow.MultiChat = {
         openChatRoom: openChatRoom,
+        getDialogInfo: getDialogInfo,
+        storeDesktopState: storeDesktopState,
+        restoreDesktopState: restoreDesktopState,
+        load: load,
+        store: store,
+        dump: dump,
         tileRooms: tileRooms
     };
 
@@ -36,6 +65,16 @@
         $('title').text(baseTitle);
         $('style').remove();
         $('script:not([src*="jquery"])').remove();
+
+        // Can't run without HTTPS (none of the frames work).
+        if (!window.location.protocol.startsWith('https')) {
+            let https = window.location.href.replace(/^[^:]*/, 'https');
+            $('<div\>')
+                .append(`Multichat works in HTTPS only. <a href="${https}">Switch now</a> or wait 5 seconds.`)
+                .appendTo('body');
+            window.setTimeout(function () { window.location = https; }, 5000);
+            return $.when();
+        }
 
         // Set up our stylesheet.
         $('<style/>').attr('type', 'text/css')
@@ -69,13 +108,18 @@
                 'background': 'gray'
             });
 
-            openChatRoom('https://chat.meta.stackexchange.com/rooms/89');
+            $(unsafeWindow).unload(function () {
+                storeDesktopState();
+            });
+
+            if (!restoreDesktopState())
+                openDefaultRooms();
 
         }).promise();
 
     }
 
-    // Pass in a string url, or an object {server, roomid}
+    // Pass in a string url, or an object { roomid, position,width,height}
     function openChatRoom (target) {
 
         let server, roomid;
@@ -87,23 +131,29 @@
             roomid = /rooms\/([0-9]+)/.exec(urlparser.pathname);
             roomid = roomid && roomid[1];
         } else if (target && target.roomid) {
-            server = target.server || window.location.hostname;
+            server = window.location.hostname;
             roomid = target.roomid;
         } else {
             console.log('invalid params to openChatRoom');
             return;
         }
 
+        if (server !== window.location.hostname) {
+            console.log('invalid server to openChatRoom');
+            return;
+        }
+
         if ($(`.multichat[data-roomid="${roomid}"]`).length === 0) {
             let room = $('<div/>')
-                .addClass('multichat')
-                .attr('data-roomid', roomid)
-                .attr('title', `Room #${roomid} (${server})`)
-                .appendTo('body');
+            .addClass('multichat')
+            .attr('data-roomid', roomid)
+            .attr('title', `Room #${roomid} (${server})`)
+            .appendTo('body');
             room.dialog({
                 appendTo: 'body',
-                width: 1000,
-                height: 500,
+                width: target.width || 1000,
+                height: target.height || 500,
+                position: target.position, // undefined is ok
                 show: 100,
                 hide: 100,
                 autoOpen: false,
@@ -120,10 +170,66 @@
                 .attr('src', `https://${server}/rooms/${roomid}`)
                 .appendTo(room);
             frame.load(function () { assimilateRoom(room, $(this).contents().find('html')); });
+        } else if (target.width && target.height && target.position) {
+            $(`.multichat[data-roomid="${roomid}"]`).dialog('option', {
+                width: target.width,
+                height: target.height,
+                position: target.position
+            });
         }
 
         $(`.multichat[data-roomid="${roomid}"]`).dialog('open');
 
+    }
+
+    function getDialogInfo (multichat) {
+        let info = {
+            open: multichat.dialog('isOpen'),
+            position: multichat.dialog('option', 'position'),
+            width: multichat.dialog('option', 'width'),
+            height: multichat.dialog('option', 'height'),
+            roomid: multichat.data('roomid'),
+            zindex: multichat.closest('.ui-dialog').css('z-index')
+        };
+        // Hack, it changes position.of to an self-referencing object when
+        // dialog is moved, which breaks JSON.stringify and thus storeDesktopState().
+        if (typeof info.position.of === 'object')
+            info.position.of = 'body';
+        return info;
+    }
+
+    function storeDesktopState () {
+        console.log('storing desktop...');
+        let desktop = { server: window.location.hostname, windows: [] };
+        $('.multichat').each(function (_, win) {
+            desktop.windows.push(getDialogInfo($(win)));
+        });
+        store(`desktop-${window.location.hostname}`, desktop);
+    }
+
+    function restoreDesktopState () {
+        console.log('restoring desktop...');
+        let restored = false;
+        let desktop = load(`desktop-${window.location.hostname}`, null);
+        if (desktop && desktop.windows) {
+            // Order by z-index so they're in the same order on creation.
+            for (let win of desktop.windows.sort((a,b) => a.zindex - b.zindex))
+                if (win.open) {
+                    openChatRoom(win);
+                    restored = true;
+                }
+        }
+        return restored;
+    }
+
+    function openDefaultRooms () {
+        let room = {};
+        switch (window.location.hostname) {
+            case 'chat.stackoverflow.com': room.roomid = 17; break;
+            case 'chat.stackexchange.com': room.roomid = 11540; break;
+            case 'chat.meta.stackexchange.com': room.roomid = 89; break;
+        }
+        openChatRoom(room);
     }
 
     function tileRooms () {
@@ -162,14 +268,15 @@
             .append('#room-tags { display: none; }\n') // Favorite button keeps recreating them in #info.
             .append(`#chat-buttons .button { margin-left: 1ex; font-size: ${buttonFontSize}; }\n`)
             .append('#chat-buttons .button:last-child { margin-right: 1ex; }\n')
+            .append('.notification { z-index: 1002; }\n')
             .appendTo(doc.find('head'));
 
         // 'attic' is where I'm putting stuff I want to remove but that is necessary for
         // SE's scripts to function properly.
         let attic = $('<div/>')
-            .css('display', 'none')
-            .attr('id', 'multichat-attic')
-            .appendTo(doc.find('body'));
+        .css('display', 'none')
+        .attr('id', 'multichat-attic')
+        .appendTo(doc.find('body'));
         doc.find('#about-room').appendTo(attic); // Needed when showing room menu.
         doc.find('#roomname').appendTo(attic);   // Needed when showing room menu.
         //doc.find('#room-tags').appendTo(attic);  // Needed by favorite button.
@@ -245,12 +352,12 @@
         // (description + room controls) up to a full-width header bar.
         doc.find('#info').attr('id', 'info-trash');
         let info = $('<div/>')
-            .attr('id', 'info')
-            .append(doc.find('#roomdesc').css('flex-grow', '1'))
-            .append(doc.find('#toggle-favorite').css('flex-shrink', '0'))
-            .append(doc.find('#sound').css('flex-shrink', '0'))
-            .append(doc.find('#room-menu').css('flex-shrink', '0'))
-            .prependTo(doc.find('#sidebar-content'));
+        .attr('id', 'info')
+        .append(doc.find('#roomdesc').css('flex-grow', '1'))
+        .append(doc.find('#toggle-favorite').css('flex-shrink', '0'))
+        .append(doc.find('#sound').css('flex-shrink', '0'))
+        .append(doc.find('#room-menu').css('flex-shrink', '0'))
+        .prependTo(doc.find('#sidebar-content'));
         doc.find('#info-trash').remove();
         info.prependTo(doc.find('body')).css({
             'position': 'fixed',
@@ -316,6 +423,31 @@
         // back into the iframe doesn't work, it's already busted at that point).
         doc.find('#upload-file').remove();
 
+    }
+
+    function load (key, def) {
+        try {
+            let value = GM_getValue(key, null);
+            return (value === null || value === undefined) ? def : JSON.parse(value);
+        } catch (e) {
+            return def;
+        }
+    }
+
+    function store (key, value) {
+        try {
+            if (value === null || value === undefined)
+                GM_deleteValue(key);
+            else
+                GM_setValue(key, JSON.stringify(value));
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function dump () {
+        for (let key of GM_listValues())
+            console.log(`${key} => ${GM_getValue(key, null)}`);
     }
 
 })();
