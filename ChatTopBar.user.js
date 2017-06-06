@@ -26,9 +26,13 @@
     }
 
     // Don't add the top bar if we're in an iframe. This is only here to make this
-    // compatible with some other scripts I'm working on.
+    // compatible with some other scripts I'm working on. Also never load it on mobile
+    // versions of the site.
     try {
-        if (window.self !== window.top && !setRunInFrame()) {
+        if ($('body').hasClass('mob')) {
+            log('Not running on mobile site', true);
+            return;
+        } else if (window.self !== window.top && !setRunInFrame()) {
             log('Not running in iframe', true);
             return;
         }
