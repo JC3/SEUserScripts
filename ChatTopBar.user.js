@@ -334,7 +334,6 @@
                         let height = isgeneric ? dropdown.outerHeight() : dropdown.height(), sheight = dropdown[0].scrollHeight;
                         let block = ((this.scrollTop === sheight - height && event.deltaY < 0) ||
                                      (this.scrollTop === 0 && event.deltaY > 0));
-                        console.log(`scrollTop=${this.scrollTop} sheight=${sheight} height=${height} deltaY=${event.deltaY} block=${block}`);
                         return !block;
                     });
             }
