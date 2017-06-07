@@ -501,17 +501,18 @@
                 '<li class="ctb-version-item">1.09<li><ul>' +
                 '<li>• Clicking site search box in SE dropdown no longer closes dropdown.' +
                 '<li>• Also, search box didn\'t work, anyways. Now it does.' +
-                '<li>• Mousewheel over-scrolling on topbar dropdowns no longer scrolls chat.' +
-                '<li>• No longer tries to load topbar in iframes or on mobile chat (for compatibility with other scripts).</ul>' +
+                '<li>• Mousewheel over-scrolling on topbar dropdowns no longer scrolls chat.</ul>' +
                 '<li class="ctb-version-item">1.08<li><ul>' +
                 '<li>• Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
                 '<li>• Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
                 '<li>• Brightness setting is now associated with the current room\'s theme rather than the room itself (so it applies to all rooms with the same theme). ' +
                 'Apologies for any reset settings (it does make a good attempt to copy them, though).' +
-                '<li>• Change log now displayed after update (when flashin "topbar" link clicked).' +
+                '<li>• Change log now displayed after update (when flashing "topbar" link clicked).' +
                 '<li>• <span>ChatTopBar.showChangeLog()</span> will always show the change log, too.' +
                 '<li>• <span>ChatTopBar</span> functions for additional settings added.' +
-                '<li>• Don\'t load jQuery UI if it\'s already loaded.</ul>' +
+                '<li>• Don\'t load jQuery UI if it\'s already loaded.' +
+                '<li>• Don\'t run in iframes (by default), for compatibility with some other scripts. <span>ChatTopBar.setRunInFrame()</span> can control this.' +
+                '<li>• Don\'t run in mobile chat layout, for compatibility with some other scripts..</ul>' +
                 '<li class="ctb-version-item">1.07<li><ul>' +
                 '<li>• Settings dialog (accessible from "topbar" link in footer).' +
                 '<li>• Wide mode now matches right side padding instead of fixed at 95%.' +
