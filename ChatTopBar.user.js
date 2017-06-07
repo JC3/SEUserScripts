@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.08
+// @version      1.09-dev1
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -98,7 +98,6 @@
         var topbar = tbframe.$('.topbar');
         var link = topbar.parent().find('link[rel="stylesheet"][href*="topbar"]');
 
-        // tbframe.StackExchange.options.enableLogging = true;
 
         // Make a new link instead of stealing the existing one to force a reload so we
         // can hook it below. If we simply move the link, while the CSS does reload, it
@@ -107,9 +106,12 @@
             .attr('rel', 'stylesheet')
             .attr('href', link.attr('href'));
 
-        // Steal topbar from iframe.
+        // Steal topbar from iframe. Also change its jQuery to be ours so that deferred
+        // load functions and stuff (i.e. the site switcher search box) can find topbar
+        // elements (yeah, hack alert).
         $('head').append(link);
         $('body').prepend(topbar);
+        tbframe.$ = tbframe.jQuery = jQuery;
 
         // Float topbar at top of window.
         topbar.css({
@@ -175,7 +177,8 @@
 
         // Hide topbar dropdowns (and settings dialog) on click (the SE JS object is in the frame).
         $(window).click(function (e) {
-            tbframe.StackExchange.topbar.hideAll();
+            if (e.target.tagName.toLowerCase() === 'a' || $(e.target).closest('.topbar-dialog').length === 0)
+                tbframe.StackExchange.topbar.hideAll();
             hideSettingsIfOutside(e.target);
         });
         $('.avatar, .action-link, #room-menu').click(function (e) {
