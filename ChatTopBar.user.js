@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.09-dev2
+// @version      1.09
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -329,8 +329,9 @@
                 dropdown
                     .off("mousewheel")
                     .on("mousewheel", function (event) {
-                        // Note: grab height every time in case the dialogs aren't fully laid out 
-                        // when this handler is installed.
+                        // Note: grab height every time in case the dialogs aren't fully laid out
+                        // when this handler is installed, or the scroll height changes (e.g. the
+                        // SE dropdown site filter changes the scroll height).
                         let height = isgeneric ? dropdown.outerHeight() : dropdown.height(), sheight = dropdown[0].scrollHeight;
                         let block = ((this.scrollTop === sheight - height && event.deltaY < 0) ||
                                      (this.scrollTop === 0 && event.deltaY > 0));
