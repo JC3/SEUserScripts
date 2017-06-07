@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.09
+// @version      1.10-dev1
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -146,6 +146,17 @@
         // Install DOM mutation observers for modifying SE dropdown when it's loaded.
         watchSEDropdown(topbar);
 
+        // Hide topbar dropdowns (and settings dialog) on click (the SE JS object is in the frame).
+        $(window).click(function (e) {
+            if (e.target.tagName.toLowerCase() === 'a' || $(e.target).closest('.topbar-dialog').length === 0)
+                tbframe.StackExchange.topbar.hideAll();
+            hideSettingsIfOutside(e.target);
+        });
+        $('.avatar, .action-link, #room-menu').click(function (e) {
+            tbframe.StackExchange.topbar.hideAll();
+            hideSettingsIfOutside(e.target);
+        });
+
         // Must wait for css to load before topbar.height() and other styles become valid.
         link.load(function () {
 
@@ -188,17 +199,6 @@
             });
             $(unsafeWindow).trigger('resize'); // Force sidebar resize, guess SE does it dynamically.
 
-        });
-
-        // Hide topbar dropdowns (and settings dialog) on click (the SE JS object is in the frame).
-        $(window).click(function (e) {
-            if (e.target.tagName.toLowerCase() === 'a' || $(e.target).closest('.topbar-dialog').length === 0)
-                tbframe.StackExchange.topbar.hideAll();
-            hideSettingsIfOutside(e.target);
-        });
-        $('.avatar, .action-link, #room-menu').click(function (e) {
-            tbframe.StackExchange.topbar.hideAll();
-            hideSettingsIfOutside(e.target);
         });
 
         // So, the chat topbar doesn't show realtime notifications (https://meta.stackexchange.com/q/296714/230261),
