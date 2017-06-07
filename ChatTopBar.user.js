@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.08
+// @version      1.09
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -55,7 +55,7 @@
     // Start grabbing the account ID while the frame is loading to minimize load time.
     var defAccountId = getAccountId();
 
-    // Start loading jQuery UI dependencies at the same time, too.
+    // Start loading jQuery UI and jQuery-mousewheel dependencies at the same time, too.
     var defJQUI = $('script[src*="jquery-ui"]').length > 0 ? $.when() : $.when(
         $.Deferred(function (def) {
             $('<link/>')
@@ -69,6 +69,20 @@
             let s = document.createElement('script');
             s.src = '//ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js';
             s.onload = def.resolve;
+            document.head.appendChild(s);
+        }),
+        $.Deferred(function (def) {
+            // Unfortunately, mousewheel isn't available on googleapis. I was hoping to not
+            // add other hosts in case the user has them blocked. TODO: Remove mousewheel
+            // dependency, this is only used to help prevent dropdown list overscrolling
+            // from scrolling the chat room.
+            let s = document.createElement('script');
+            s.src = '//cdnjs.cloudflare.com/ajax/libs/jquery-mousewheel/3.1.13/jquery.mousewheel.min.js';
+            s.onload = def.resolve;
+            s.onerror = function (e) {
+                log('Failed to load jQuery-mousewheel, overscroll protection won\'t work, no big deal.', true);
+                def.resolve(); // proceed anyway
+            };
             document.head.appendChild(s);
         })
     );
@@ -107,9 +121,12 @@
             .attr('rel', 'stylesheet')
             .attr('href', link.attr('href'));
 
-        // Steal topbar from iframe.
+        // Steal topbar from iframe. Also change its jQuery to be ours so that deferred
+        // load functions and stuff (i.e. the site switcher search box) can find topbar
+        // elements (yeah, hack alert).
         $('head').append(link);
         $('body').prepend(topbar);
+        tbframe.$ = tbframe.jQuery = jQuery;
 
         // Float topbar at top of window.
         topbar.css({
@@ -175,7 +192,8 @@
 
         // Hide topbar dropdowns (and settings dialog) on click (the SE JS object is in the frame).
         $(window).click(function (e) {
-            tbframe.StackExchange.topbar.hideAll();
+            if (e.target.tagName.toLowerCase() === 'a' || $(e.target).closest('.topbar-dialog').length === 0)
+                tbframe.StackExchange.topbar.hideAll();
             hideSettingsIfOutside(e.target);
         });
         $('.avatar, .action-link, #room-menu').click(function (e) {
@@ -300,6 +318,25 @@
                 });
                 setRejoinOnSwitch(); // Will set switch link hrefs.
                 setShowSwitcher();
+            }
+            if (a.classList && a.classList.contains('topbar-dialog') && a.getElementsByTagName('link').length > 0) {
+                log('Generic topbar dropdown loaded.');
+                // Stop dropdown over-scrolling from scrolling chat window (adapted from https://stackoverflow.com/a/10514680):
+                let dropdown = $(a);
+                let isgeneric;
+                if ((isgeneric = !dropdown.hasClass('siteSwitcher-dialog'))) // only site-switcher has scrollbar at top level
+                    dropdown = dropdown.find('.modal-content:first');
+                dropdown
+                    .off("mousewheel")
+                    .on("mousewheel", function (event) {
+                        // Note: grab height every time in case the dialogs aren't fully laid out
+                        // when this handler is installed, or the scroll height changes (e.g. the
+                        // SE dropdown site filter changes the scroll height).
+                        let height = isgeneric ? dropdown.outerHeight() : dropdown.height(), sheight = dropdown[0].scrollHeight;
+                        let block = ((this.scrollTop === sheight - height && event.deltaY < 0) ||
+                                     (this.scrollTop === 0 && event.deltaY > 0));
+                        return !block;
+                    });
             }
         }))).observe(topbar.find('.js-topbar-dialog-corral')[0], {
             childList: true,
@@ -461,6 +498,11 @@
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
             $('body').append(
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
+                '<li class="ctb-version-item">1.09<li><ul>' +
+                '<li>• Clicking site search box in SE dropdown no longer closes dropdown.' +
+                '<li>• Also, search box didn\'t work, anyways. Now it does.' +
+                '<li>• Mousewheel over-scrolling on topbar dropdowns no longer scrolls chat.' +
+                '<li>• No longer tries to load topbar in iframes or on mobile chat (for compatibility with other scripts).</ul>' +
                 '<li class="ctb-version-item">1.08<li><ul>' +
                 '<li>• Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
                 '<li>• Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
@@ -469,8 +511,7 @@
                 '<li>• Change log now displayed after update (when flashin "topbar" link clicked).' +
                 '<li>• <span>ChatTopBar.showChangeLog()</span> will always show the change log, too.' +
                 '<li>• <span>ChatTopBar</span> functions for additional settings added.' +
-                '<li>• Don\'t load jQuery UI if it\'s already loaded.' +
-                '</ul>' +
+                '<li>• Don\'t load jQuery UI if it\'s already loaded.</ul>' +
                 '<li class="ctb-version-item">1.07<li><ul>' +
                 '<li>• Settings dialog (accessible from "topbar" link in footer).' +
                 '<li>• Wide mode now matches right side padding instead of fixed at 95%.' +
