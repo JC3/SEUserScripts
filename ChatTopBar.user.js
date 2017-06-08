@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.09
+// @version      1.10
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -42,6 +42,7 @@
     }
 
     const RECONNECT_WAIT_MS = 500;
+    const AUTO_SEARCH_DELAY_MS = 500;
     const URL_UPDATES = 'https://stackapps.com/q/7404/25350';
     const URL_MORE = 'https://stackapps.com/search?tab=active&q=user%3a25350%20is%3aq%20%5bscript%5d%20';
 
@@ -97,6 +98,8 @@
         setQuiet: setQuiet,
         setShowSwitcher: setShowSwitcher,
         setRejoinOnSwitch: setRejoinOnSwitch,
+        setOpenRoomsHere: setOpenRoomsHere,
+        setAutoSearch: setAutoSearch,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
@@ -146,6 +149,23 @@
         // Install DOM mutation observers for modifying SE dropdown when it's loaded.
         watchSEDropdown(topbar);
 
+        // Add chat room search dropdown.
+        createRoomSearchDropdown(topbar);
+
+        // Hide topbar dropdowns (and settings dialog) on click (the SE JS object is in the frame).
+        $(window).click(function (e) {
+            if (e.target.tagName.toLowerCase() === 'a' || $(e.target).closest('.topbar-dialog').length === 0) {
+                tbframe.StackExchange.topbar.hideAll();
+                toggleRoomSearchDropdown('clickout');
+            }
+            hideSettingsIfOutside(e.target);
+        });
+        $('.avatar, .action-link, #room-menu').click(function (e) {
+            tbframe.StackExchange.topbar.hideAll();
+            toggleRoomSearchDropdown('clickout');
+            hideSettingsIfOutside(e.target);
+        });
+
         // Must wait for css to load before topbar.height() and other styles become valid.
         link.load(function () {
 
@@ -188,17 +208,6 @@
             });
             $(unsafeWindow).trigger('resize'); // Force sidebar resize, guess SE does it dynamically.
 
-        });
-
-        // Hide topbar dropdowns (and settings dialog) on click (the SE JS object is in the frame).
-        $(window).click(function (e) {
-            if (e.target.tagName.toLowerCase() === 'a' || $(e.target).closest('.topbar-dialog').length === 0)
-                tbframe.StackExchange.topbar.hideAll();
-            hideSettingsIfOutside(e.target);
-        });
-        $('.avatar, .action-link, #room-menu').click(function (e) {
-            tbframe.StackExchange.topbar.hideAll();
-            hideSettingsIfOutside(e.target);
         });
 
         // So, the chat topbar doesn't show realtime notifications (https://meta.stackexchange.com/q/296714/230261),
@@ -345,6 +354,282 @@
 
     }
 
+    // Create and initialize the room search dropdown.
+    function createRoomSearchDropdown (topbar) {
+
+        // Add a button for it.
+        let icon = $('<span class="topbar-icon icon-inbox"/>')
+            .css({
+                'background-position-x': -101,
+                'background-position-y': 0,
+                'width': 18,
+                'height': 18,
+                'top': 8,
+                'margin': '0 9px'
+            });
+        $('<a href="#" class="topbar-icon yes-hover" id="mc-roomfinder-button"/>')
+            .attr('title', 'Chat room list')
+            .append($('<span class="hidden-text">Chat room list</span>'))
+            .append(icon)
+            .appendTo(topbar.find('.network-items'))
+            .mouseenter((e) => (toggleRoomSearchDropdown('enter', e.target), false))
+            .click((e) => (toggleRoomSearchDropdown('click', e.target), false))
+            .css({
+                'background-position-x': -(220 - 72),
+                'background-position-y': -(54 - 36)
+            });
+
+        // We'll need to add mouseenter handlers for the other buttons to support topbar
+        // style behaviors. More comments in toggleRoomSearchDropdown().
+        topbar.find('.network-items > .topbar-icon:not(#mc-roomfinder-button)')
+            .mouseenter((e) => (toggleRoomSearchDropdown('away', e.target), false));
+
+        // Create the dropdown. We can put it in the corral, then as a side-effect it'll
+        // get the overscroll fix applied to it as well.
+        let search;
+        let roomlist;
+        let dropdown = $('<div class="topbar-dialog" id="mc-roomfinder-dialog"/>')
+            .append($('<div class="header"><h3>chat rooms</h3></div>'))
+            .append(search = $('<div class="modal-content"/>'))
+            .append(roomlist = $('<div class="modal-content" id="mc-roomfinder-results"/>'))
+            .appendTo(topbar.find('.js-topbar-dialog-corral'))
+            .data('mc-display', 'flex')
+            .css({
+                'display': 'none',
+                'width': 375,
+                'min-height': 420, // Same as site switcher (inbox/achievements are 390).
+                'max-height': 420,
+                'font-size': '12px',
+                'flex-direction': 'column'
+            });
+        $('<div class="site-filter-container"/>')
+            .css('display', 'flex')
+            .append($('<input type="text" class="site-filter-input" id="mc-roomfinder-filter" placeholder="Find a chat room"/>').css('flex-grow', '1'))
+            .append($('<button id="mc-roomfinder-go">SEARCH</button>').css({
+                'margin': '5px 0 5px 5px',
+                'padding': '3px',
+                'font-size': '11px'
+            }))
+            .appendTo(search);
+        $('<div class="mc-result-container" id="mc-result-more"\>')
+            .text('No results.')
+            .appendTo(roomlist);
+        dropdown.find('.header, .model-content').css('flex-shrink', '0');
+        dropdown.find('.modal-content').css('padding', 0);
+        search.find('button').click(() => (doRoomSearch(), false));
+        roomlist.css({
+            'flex-grow': '1',
+            'max-height': 'none',
+            'overflow-x': 'hidden',
+            'overflow-y': 'scroll'
+        });
+
+        // I'm sick of typing .css() everywhere. Style the search results in a stylesheet.
+        $('<style type="text/css"/>').text(
+            '.mc-result-container { padding: 10px; border-top: 1px solid #eff0f1; line-height: 1.3; }\n' +
+            '.mc-result-container:hover { background: #f7f8f8; }\n' +
+            '.mc-result-link { }\n' +
+            '.mc-result-title { margin-bottom: 4px; }\n' +
+            '.mc-result-description { margin-bottom: 4px; color: #2f3337; }\n' +
+            '.mc-result-info { color: #848d95; }\n' +
+            '.mc-result-users { }\n' +
+            '.mc-result-activity { float: right; }\n' +
+            '#mc-result-more { color: #999; }\n' +
+            '.mc-result-more-link { font-weight: bold; color: #0077cc !important; }\n')
+            .prependTo(dropdown);
+
+        // Sets search button visibility.
+        setAutoSearch();
+
+        let filter = $('#mc-roomfinder-filter');
+        let timerId;
+        filter.keyup(function (e) {
+            let auto = filter.data('mc-auto');
+
+            // Enter key searches.
+            if (e.keyCode == 13 && !auto)
+                $('#mc-roomfinder-go').click();
+
+            // Do auto search 1 second after last key pressed.
+            if (timerId) {
+                window.clearTimeout(timerId);
+                timerId = null;
+            }
+            if (auto) {
+                timerId = window.setTimeout(function () {
+                    let cur = filter.val().trim();
+                    let old = (filter.data('mc-last-auto') || '');
+                    if (cur !== old) {
+                        //console.log(`filter change ${old} => ${cur}`);
+                        filter.data('mc-last-auto', cur);
+                        if (filter.data('mc-auto')) {
+                            //console.log('auto search');
+                            doRoomSearch();
+                        }
+                    }
+                }, AUTO_SEARCH_DELAY_MS);
+            }
+
+        });
+
+    }
+
+    // Show/hide the room search dropdown.
+    function toggleRoomSearchDropdown (why, source) {
+
+        let dropdown = $('#mc-roomfinder-dialog');
+        let button = $('#mc-roomfinder-button');
+
+        // Figure out what state we're in and what state we should be in. Since the
+        // topbar doesn't publicly expose its dialog management functions, we have
+        // to implement matching behavior ourselves (hide other dialogs, show on hover,
+        // etc.).
+        let isVisible = (dropdown.css('display') !== 'none');
+        let othersVisible = ($('.network-items > .topbar-icon-on:not(#mc-roomfinder-button)').length > 0);
+        let wantVisible;
+        let wantOthersVisible = false;
+
+        // All the logic for topbar-compatible click/hover behavior is here:
+        if ((why || 'click') === 'click') {  // Clicked on the icon.
+            wantVisible = !isVisible;
+        } else if (why === 'enter') {        // Mouse entered the icon.
+            wantVisible = isVisible || othersVisible;
+        } else if (why === 'away') {         // Mouse left the icon.
+            wantVisible = false;
+            wantOthersVisible = isVisible || othersVisible;
+        } else if (why === 'clickout') {     // Clicked outside the dialog.
+            wantVisible = false;
+            wantOthersVisible = othersVisible;
+        } else {
+            return;
+        }
+
+        // Hide/show native topbar dropdowns as needed.
+        if (source && (othersVisible !== wantOthersVisible)) {
+            if (wantOthersVisible)
+                log(`TODO: I wanted to show another topbar dropdown (${source.getAttribute('class')}), but I don\'t know how.`, true);
+            else
+                window.frames[0].StackExchange.topbar.hideAll();
+        }
+
+        // Hide/show room search dropdown as needed.
+        if (isVisible !== wantVisible) {
+            if (wantVisible) {
+                dropdown.css({
+                    'display': dropdown.data('mc-display'),
+                    'left': button.position().left,
+                    'top': button.position().top + $('.topbar').height()
+                });
+                button.addClass('topbar-icon-on');
+            } else {
+                dropdown.css('display', 'none');
+                button.removeClass('topbar-icon-on');
+            }
+        }
+
+        // First time it is displayed, load it up with some rooms.
+        if (wantVisible && !dropdown.data('mc-shown-once')) {
+            dropdown.data('mc-shown-once', true);
+            doRoomSearch();
+        }
+
+    }
+
+    // Perform room search.
+    function doRoomSearch (more) {
+
+        let res = $('#mc-roomfinder-results');
+        let status = $('#mc-result-more');
+        let sinput = $('#mc-roomfinder-filter');
+        let sbutton = $('#mc-roomfinder-go');
+        let params;
+
+        sinput.prop('disabled', !sinput.data('mc-auto'));
+        sbutton.prop('disabled', true);
+        status.removeClass('mc-result-more-link');
+
+        // New search vs. loading more results.
+        if (more && res.data('mc-params')) {
+            // Update status.
+            status.toggle(true).off('click').text('Loading More...');
+            // Next page, from data.
+            params = res.data('mc-params');
+            params.page = (params.page || 1) + 1;
+            res.data('mc-params', params);
+        } else {
+            // Clear existing results and update status.
+            status.toggle(true).off('click').text('Loading...');
+            res.find('.mc-result-card').remove();
+            // First page, use filter from text box and store it.
+            params = {
+                tab: 'all',
+                sort: 'active',
+                filter: sinput.val().trim(),
+                pageSize: 20,
+                nohide: false
+            };
+            res.data('mc-params', params);
+            sinput.data('mc-last-auto', sinput.val());
+        }
+
+        // Run search.
+        log(`Running search: ${JSON.stringify(params)}`);
+        $.post('/rooms', params).then(function (html) {
+            let doc = $('<div/>').html(html);
+            doc.find('.roomcard').each(function (_, roomcard) {
+                roomcard = $(roomcard);
+                let result = {
+                    name: roomcard.find('.room-name').text().trim(),
+                    description: roomcard.find('.room-description').html().trim(),
+                    activity: roomcard.find('.last-activity').html().trim(),
+                    users: Number(roomcard.find('.room-users').attr('title').replace(/[^0-9]/g, '')),
+                    id: Number(roomcard.attr('id').replace(/[^0-9]/g, ''))
+                };
+                $('<div class="mc-result-container mc-result-card"\>')
+                    .append($(`<a href="//${window.location.hostname}/rooms/${result.id}" class="mc-result-link"/>`)
+                        .append($(`<div class="mc-result-title">${escape(result.name)}</div>`))
+                        .append($(`<div class="mc-result-description">${result.description}</div>`)))
+                    .append($(`<div class="mc-result-info"><span class="mc-result-users">${withs(result.users, 'user')}</span><span class="mc-result-activity">${result.activity}</span></div>`))
+                    .appendTo(res);
+            });
+            if (doc.find('.pager a[rel="next"').length > 0) {
+                status
+                    .addClass('mc-result-more-link')
+                    .toggle(true)
+                    .text('Load More...')
+                    .click(() => (doRoomSearch(true), false))
+                    .appendTo(res);
+            } else if (res.find('.mc-result-card').length === 0) {
+                status
+                    .removeClass('mc-result-more-link')
+                    .toggle(true)
+                    .text('No results.')
+                    .off('click');
+            } else {
+                status.toggle(false);
+            }
+            setOpenRoomsHere(); // Update target attribute in result links.
+        }).fail(function (e) {
+            res.text('An error occurred.');
+        }).always(function () {
+            sinput.prop('disabled', false);
+            sbutton.prop('disabled', false);
+            if (!sinput.data('mc-auto'))
+                sinput.focus();
+        });
+
+    }
+
+    // Sloppily escape HTML.
+    function escape (str) {
+        return str.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;');
+    }
+
+    // Concatenate a number to a string then pluralize a string.
+    function withs (n, str, suffix) {
+        return (n === 1) ? `${n} ${str}` : `${n} ${str}${suffix || 's'}`;
+    }
+
     // Show settings popup.
     function showSettings () {
 
@@ -363,6 +648,8 @@
                 '<label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>' +
                 '<label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>' +
                 '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
+                '<label><input type="checkbox" name="autosearch" onchange="ChatTopBar.setAutoSearch(this.checked)"><span>Search for rooms as you type</span></label>' +
+                '<label><input type="checkbox" name="open" onchange="ChatTopBar.setOpenRoomsHere(this.checked)"><span>Open search result rooms in this tab</span></label>' +
                 '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
                 '<hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>' +
                 '<div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>' +
@@ -424,6 +711,8 @@
             dialog.find('[name="quiet"]').prop('checked', setQuiet());
             dialog.find('[name="rejoin"]').prop('checked', setRejoinOnSwitch());
             dialog.find('[name="switch"]').prop('checked', setShowSwitcher());
+            dialog.find('[name="autosearch"]').prop('checked', setAutoSearch());
+            dialog.find('[name="open"]').prop('checked', setOpenRoomsHere());
             dialog.find('#ctb-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
         }
@@ -498,54 +787,69 @@
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
             $('body').append(
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
+                '<li class="ctb-version-item">1.10<li><ul>' +
+                '<li>Search for chat rooms from the top bar! Click the chat icon near the left. Supports search-as-you-type (can be disabled), and optionally ' +
+                'lets you open rooms in the current tab. Try it! Check settings dialog for new options.' +
+                '<li><span>ChatTopBar</span> new functions for search options.' +
+                '<li>Cleaner list styling in the change log dialog.</ul>' +
                 '<li class="ctb-version-item">1.09<li><ul>' +
-                '<li>• Clicking site search box in SE dropdown no longer closes dropdown.' +
-                '<li>• Also, search box didn\'t work, anyways. Now it does.' +
-                '<li>• Mousewheel over-scrolling on topbar dropdowns no longer scrolls chat.</ul>' +
+                '<li>Clicking site search box in SE dropdown no longer closes dropdown.' +
+                '<li>Also, search box didn\'t work, anyways. Now it does.' +
+                '<li>Mousewheel over-scrolling on topbar dropdowns no longer scrolls chat.</ul>' +
                 '<li class="ctb-version-item">1.08<li><ul>' +
-                '<li>• Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
-                '<li>• Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
-                '<li>• Brightness setting is now associated with the current room\'s theme rather than the room itself (so it applies to all rooms with the same theme). ' +
+                '<li>Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
+                '<li>Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
+                '<li>Brightness setting is now associated with the current room\'s theme rather than the room itself (so it applies to all rooms with the same theme). ' +
                 'Apologies for any reset settings (it does make a good attempt to copy them, though).' +
-                '<li>• Change log now displayed after update (when flashing "topbar" link clicked).' +
-                '<li>• <span>ChatTopBar.showChangeLog()</span> will always show the change log, too.' +
-                '<li>• <span>ChatTopBar</span> functions for additional settings added.' +
-                '<li>• Don\'t load jQuery UI if it\'s already loaded.' +
-                '<li>• Don\'t run in iframes (by default), for compatibility with some other scripts. <span>ChatTopBar.setRunInFrame()</span> can control this.' +
-                '<li>• Don\'t run in mobile chat layout, for compatibility with some other scripts..</ul>' +
+                '<li>Change log now displayed after update (when flashing "topbar" link clicked).' +
+                '<li><span>ChatTopBar.showChangeLog()</span> will always show the change log, too.' +
+                '<li><span>ChatTopBar</span> functions for additional settings added.' +
+                '<li>Don\'t load jQuery UI if it\'s already loaded.' +
+                '<li>Don\'t run in iframes (by default), for compatibility with some other scripts. <span>ChatTopBar.setRunInFrame()</span> can control this.' +
+                '<li>Don\'t run in mobile chat layout, for compatibility with some other scripts..</ul>' +
                 '<li class="ctb-version-item">1.07<li><ul>' +
-                '<li>• Settings dialog (accessible from "topbar" link in footer).' +
-                '<li>• Wide mode now matches right side padding instead of fixed at 95%.' +
-                '<li>• More descriptive search box placeholders.' +
-                '<li>• <span>ChatTopBar.forgetEverything</span>, for testing.</ul>' +
+                '<li>Settings dialog (accessible from "topbar" link in footer).' +
+                '<li>Wide mode now matches right side padding instead of fixed at 95%.' +
+                '<li>More descriptive search box placeholders.' +
+                '<li><span>ChatTopBar.forgetEverything</span>, for testing.</ul>' +
                 '<li class="ctb-version-item">1.06<li><ul>' +
-                '<li>• Brightness now only applied if theme enabled.' +
-                '<li>• Sidebar resized so it doesn\'t hide behind the bottom panel.' +
-                '<li>• <span>ChatTopBar.fakeUnreadCounts(inbox,rep)</span> for debugging.' +
-                '<li>• Explicit <span>unsafeWindow</span> grant.' +
-                '<li>• Sort output of <span>dumpSettings()</span>.</ul>' +
+                '<li>Brightness now only applied if theme enabled.' +
+                '<li>Sidebar resized so it doesn\'t hide behind the bottom panel.' +
+                '<li><span>ChatTopBar.fakeUnreadCounts(inbox,rep)</span> for debugging.' +
+                '<li>Explicit <span>unsafeWindow</span> grant.' +
+                '<li>Sort output of <span>dumpSettings()</span>.</ul>' +
                 '<li class="ctb-version-item">1.05<li><ul>' +
-                '<li>• Per-room icon/text brightness option.' +
-                '<li>• Option to suppress console output.' +
-                '<li>• Ability to dump settings to console for testing.' +
-                '<li>• Fixed a style bug where things were happening before CSS was loaded, was sometimes causing non-themed topbar to have a white background instead of black.</ul>' +
+                '<li>Per-room icon/text brightness option.' +
+                '<li>Option to suppress console output.' +
+                '<li>Ability to dump settings to console for testing.' +
+                '<li>Fixed a style bug where things were happening before CSS was loaded, was sometimes causing non-themed topbar to have a white background instead of black.</ul>' +
                 '<li class="ctb-version-item">1.03<li><ul>' +
-                '<li>• <span>ChatTopBar</span> console interface for setting options.' +
-                '<li>• Widen / theme options now user-settable.' +
-                '<li>• Ability to forget cached account ID for testing.</ul>' +
+                '<li><span>ChatTopBar</span> console interface for setting options.' +
+                '<li>Widen / theme options now user-settable.' +
+                '<li>Ability to forget cached account ID for testing.</ul>' +
                 '<li class="ctb-version-item">1.02<li><ul>' +
-                '<li>• WebSocket reconnect when connection lost.' +
-                '<li>• Beta code for themed topbar.' +
-                '<li>• Better console logging.</ul>' +
+                '<li>WebSocket reconnect when connection lost.' +
+                '<li>Beta code for themed topbar.' +
+                '<li>Better console logging.</ul>' +
                 '<li class="ctb-version-item">1.01<li><ul>' +
-                '<li>• Realtime event handling via websocket.</ul>' +
+                '<li>Realtime event handling via websocket.</ul>' +
                 '<li class="ctb-version-item">1.00<li><ul>' +
-                '<li>• Initial version.</ul>' +
+                '<li>Initial version.</ul>' +
                 '</ul></div>');
             $('.ctb-version-item, .ctb-important').css({'margin-top': '1.5ex', 'font-size': '120%'});
             $('.ctb-version-item').css({'font-weight': 'bold'});
             $('#ctb-changes-list ul').css('margin-left', '2ex');
-            $('#ctb-changes-list span').css({'font-family': 'monospace', 'color': '#00a'});
+            $('#ctb-changes-list span').css({'font-family': 'monospace', 'color': '#666'});
+            $('#ctb-changes-list ul li').each(function(_, li) {
+                let item = $(li);
+                let html = item.html();
+                item
+                    .text('')
+                    .css('display', 'flex')
+                    .css('margin-top', '0.25ex')
+                    .append($('<div>•</div>').css('margin-right', '0.75ex'))
+                    .append($('<div/>').html(html));
+            });
         }
 
         $('#ctb-changes-dialog').dialog({
@@ -691,6 +995,37 @@
         });
 
         return rejoin;
+
+    }
+
+    // Set whether or not rooms chosen from the room finder load in this frame or a
+    // new tab. Default is true (this frame). Null or undefined loads the persistent
+    // setting. Saves setting persistently. Returns the value of the option.
+    function setOpenRoomsHere (open) {
+
+        open = loadOrStore('openRoomsHere', open, true);
+
+        if (open)
+            $('.mc-result-link').attr('target', '_top');
+        else
+            $('.mc-result-link').removeAttr('target');
+
+        return open;
+
+    }
+
+    // Set whether room search happens as you type, or requires you to press a button.
+    // True for as you type, false for button. Default is true. Null or undefined
+    // loads the persistent setting. Saves setting persistently. Returns the value
+    // of the option.
+    function setAutoSearch (auto) {
+
+        auto = loadOrStore('autoSearch', auto, true);
+
+        $('#mc-roomfinder-go').toggle(!auto);
+        $('#mc-roomfinder-filter').data('mc-auto', auto);
+
+        return auto;
 
     }
 
