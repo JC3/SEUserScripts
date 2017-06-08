@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.10-dev3
+// @version      1.10-dev4
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -395,8 +395,8 @@
             .css({
                 'display': 'none',
                 'width': 375,
-                'min-height': 390,
-                'max-height': 390,
+                'min-height': 420, // Same as site switcher (inbox/achievements are 390).
+                'max-height': 420,
                 'font-size': '12px',
                 'flex-direction': 'column'
             });
@@ -409,6 +409,9 @@
                 'font-size': '11px'
             }))
             .appendTo(search);
+        $('<div class="mc-result-container" id="mc-result-more"\>')
+            .text('No results.')
+            .appendTo(roomlist);
         dropdown.find('.header, .model-content').css('flex-shrink', '0');
         dropdown.find('.modal-content').css('padding', 0);
         search.find('button').click(() => (doRoomSearch(), false));
@@ -428,7 +431,9 @@
             '.mc-result-description { margin-bottom: 4px; color: #2f3337; }\n' +
             '.mc-result-info { color: #848d95; }\n' +
             '.mc-result-users { }\n' +
-            '.mc-result-activity { float: right; }\n')
+            '.mc-result-activity { float: right; }\n' +
+            '#mc-result-more { color: #999; }\n' +
+            '.mc-result-more-link { font-weight: bold; color: #0077cc !important; }\n')
             .prependTo(dropdown);
 
     }
@@ -486,30 +491,53 @@
             }
         }
 
+        // First time it is displayed, load it up with some rooms.
+        if (wantVisible && !dropdown.data('mc-shown-once')) {
+            dropdown.data('mc-shown-once', true);
+            doRoomSearch();
+        }
+
     }
 
     // Perform room search.
-    function doRoomSearch () {
+    function doRoomSearch (more) {
 
         let res = $('#mc-roomfinder-results');
+        let status = $('#mc-result-more');
         let sinput = $('#mc-roomfinder-filter');
         let sbutton = $('#mc-roomfinder-go');
-        let filter = sinput.val().trim();
+        let params;
 
-        // Clear existing results.
-        res.text('Loading...');
         sinput.prop('disabled', true);
         sbutton.prop('disabled', true);
+        status.removeClass('mc-result-more-link');
+
+        // New search vs. loading more results.
+        if (more && res.data('mc-params')) {
+            // Update status.
+            status.toggle(true).off('click').text('Loading More...');
+            // Next page, from data.
+            params = res.data('mc-params');
+            params.page = (params.page || 1) + 1;
+            res.data('mc-params', params);
+        } else {
+            // Clear existing results and update status.
+            status.toggle(true).off('click').text('Loading...');
+            res.find('.mc-result-card').remove();
+            // First page, use filter from text box and store it.
+            params = {
+                tab: 'all',
+                sort: 'active',
+                filter: sinput.val().trim(),
+                pageSize: 20,
+                nohide: false
+            };
+            res.data('mc-params', params);
+        }
 
         // Run search.
-        $.post('/rooms', {
-            tab: 'all',
-            sort: 'active',
-            filter: filter,
-            pageSize: 20,
-            nohide: false
-        }).then(function (html) {
-            res.empty();
+        log(`Running search: ${JSON.stringify(params)}`);
+        $.post('/rooms', params).then(function (html) {
             let doc = $('<div/>').html(html);
             doc.find('.roomcard').each(function (_, roomcard) {
                 roomcard = $(roomcard);
@@ -520,14 +548,30 @@
                     users: Number(roomcard.find('.room-users').attr('title').replace(/[^0-9]/g, '')),
                     id: Number(roomcard.attr('id').replace(/[^0-9]/g, ''))
                 };
-                $('<div class="mc-result-container"\>')
+                $('<div class="mc-result-container mc-result-card"\>')
                     .append($(`<a href="//${window.location.hostname}/rooms/${result.id}" class="mc-result-link"/>`)
                         .append($(`<div class="mc-result-title">${escape(result.name)}</div>`))
                         .append($(`<div class="mc-result-description">${result.description}</div>`)))
                     .append($(`<div class="mc-result-info"><span class="mc-result-users">${withs(result.users, 'user')}</span><span class="mc-result-activity">${result.activity}</span></div>`))
                     .appendTo(res);
             });
-            setOpenRoomsHere();
+            if (doc.find('.pager a[rel="next"').length > 0) {
+                status
+                    .addClass('mc-result-more-link')
+                    .toggle(true)
+                    .text('Load More...')
+                    .click(() => (doRoomSearch(true), false))
+                    .appendTo(res);
+            } else if (doc.find('.mc-result-card').length === 0) {
+                status
+                    .removeClass('mc-result-more-link')
+                    .toggle(true)
+                    .text('No results.')
+                    .off('click');
+            } else {
+                status.toggle(false);
+            }
+            setOpenRoomsHere(); // Update target attribute in result links.
         }).fail(function (e) {
             res.text('An error occurred.');
         }).always(function () {
@@ -537,12 +581,14 @@
 
     }
 
+    // Sloppily escape HTML.
     function escape (str) {
         return str.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;');
     }
 
-    function withs (n, str) {
-        return (n === 1) ? `${n} ${str}` : `${n} ${str}s`;
+    // Concatenate a number to a string then pluralize a string.
+    function withs (n, str, suffix) {
+        return (n === 1) ? `${n} ${str}` : `${n} ${str}${suffix || 's'}`;
     }
 
     // Show settings popup.
