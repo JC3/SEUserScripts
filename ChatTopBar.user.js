@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.10-dev1
+// @version      1.10-dev2
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -145,6 +145,9 @@
 
         // Install DOM mutation observers for modifying SE dropdown when it's loaded.
         watchSEDropdown(topbar);
+
+        // Add chat room search dropdown.
+        createRoomSearchDropdown(topbar);
 
         // Hide topbar dropdowns (and settings dialog) on click (the SE JS object is in the frame).
         $(window).click(function (e) {
@@ -342,6 +345,105 @@
             childList: true,
             subtree: true
         });
+
+    }
+
+    // Create and initialize the room search dropdown.
+    function createRoomSearchDropdown (topbar) {
+
+        // Add a button for it.
+        let icon = $('<span class="topbar-icon icon-inbox"/>')
+            .css({
+                'background-position-x': -101,
+                'background-position-y': 0,
+                'width': 18,
+                'height': 18,
+                'top': 8,
+                'margin': '0 9px'
+            });
+        $('<a href="#" class="topbar-icon yes-hover" id="mc-roomfinder-button"/>')
+            .attr('title', 'Chat room list')
+            .append($('<span class="hidden-text">Chat room list</span>'))
+            .append(icon)
+            .appendTo(topbar.find('.network-items'))
+            .mouseenter((e) => (toggleRoomSearchDropdown('enter', e.target), false))
+            .click((e) => (toggleRoomSearchDropdown('click', e.target), false))
+            .css({
+                'background-position-x': -(220 - 72),
+                'background-position-y': -(54 - 36)
+            });
+
+        // We'll need to add mouseenter handlers for the other buttons to support topbar
+        // style behaviors. More comments in toggleRoomSearchDropdown().
+        topbar.find('.network-items > .topbar-icon:not(#mc-roomfinder-button)')
+            .mouseenter((e) => (toggleRoomSearchDropdown('away', e.target), false));
+
+        // Create the dropdown. We can put it in the corral, then as a side-effect it'll
+        // get the overscroll fix applied to it as well.
+        let dropdown = $('<div class="topbar-dialog" id="mc-roomfinder-dialog"/>')
+            .append($('<div class="header"><h3>chat rooms</h3></div>'))
+            .appendTo(topbar.find('.js-topbar-dialog-corral'))
+            .css({
+                'display': 'none',
+                'width': 375,
+                'max-height': 505,
+                'font-size': '12px'
+            });
+        let content = $('<div class="modal-content"/>')
+            .appendTo(dropdown)
+            .text('some crap here');
+
+    }
+
+    // Show/hide the room search dropdown.
+    function toggleRoomSearchDropdown (why, source) {
+
+        let dropdown = $('#mc-roomfinder-dialog');
+        let button = $('#mc-roomfinder-button');
+
+        // Figure out what state we're in and what state we should be in. Since the
+        // topbar doesn't publicly expose its dialog management functions, we have
+        // to implement matching behavior ourselves (hide other dialogs, show on hover,
+        // etc.).
+        let isVisible = (dropdown.css('display') === 'block');
+        let othersVisible = ($('.network-items > .topbar-icon-on:not(#mc-roomfinder-button)').length > 0);
+        let wantVisible;
+        let wantOthersVisible = false;
+
+        if ((why || 'click') === 'click') {
+            wantVisible = !isVisible;
+        } else if (why === 'enter') {
+            wantVisible = isVisible || othersVisible;
+        } else if (why === 'away') {
+            wantVisible = false;
+            wantOthersVisible = isVisible || othersVisible;
+        } else {
+            return;
+        }
+
+        // console.log(`toggle ${why} ${isVisible}=>${wantVisible} others:${othersVisible}=>${wantOthersVisible}`);
+
+        if (source && (othersVisible !== wantOthersVisible)) {
+            if (wantOthersVisible)
+                log(`TODO: I wanted to show another topbar dropdown (${source.getAttribute('class')}), but I don\'t know how.`, true);
+            else
+                window.frames[0].StackExchange.topbar.hideAll();
+        }
+
+        if (isVisible === wantVisible)
+            return;
+
+        if (wantVisible) {
+            dropdown.css({
+                'display': 'block',
+                'left': button.position().left,
+                'top': button.position().top + $('.topbar').height()
+            });
+            button.addClass('topbar-icon-on');
+        } else {
+            dropdown.css('display', 'none');
+            button.removeClass('topbar-icon-on');
+        }
 
     }
 
