@@ -380,18 +380,39 @@
 
         // Create the dropdown. We can put it in the corral, then as a side-effect it'll
         // get the overscroll fix applied to it as well.
+        let search;
+        let roomlist;
         let dropdown = $('<div class="topbar-dialog" id="mc-roomfinder-dialog"/>')
             .append($('<div class="header"><h3>chat rooms</h3></div>'))
+            .append(search = $('<div class="modal-content"/>'))
+            .append(roomlist = $('<div class="modal-content"/>'))
             .appendTo(topbar.find('.js-topbar-dialog-corral'))
+            .data('mc-display', 'flex')
             .css({
                 'display': 'none',
                 'width': 375,
-                'max-height': 505,
-                'font-size': '12px'
+                'min-height': 390,
+                'max-height': 390,
+                'font-size': '12px',
+                'flex-direction': 'column'
             });
-        let content = $('<div class="modal-content"/>')
-            .appendTo(dropdown)
-            .text('some crap here');
+        $('<div class="site-filter-container"/>')
+            .css('display', 'flex')
+            .append($('<input type="text" class="site-filter-input" placeholder="Find a chat room"/>').css('flex-grow', '1'))
+            .append($('<button>SEARCH</button>').css({
+                'margin': '5px 0 5px 5px',
+                'padding': '3px',
+                'font-size': '11px'
+            }))
+            .appendTo(search);
+        dropdown.find('.header .model-content').css('flex-shrink', '0');
+        dropdown.find('.modal-content').css('padding', 0);
+        roomlist.css({
+            'flex-grow': '1',
+            'max-height': 'none',
+            'overflow-x': 'hidden',
+            'overflow-y': 'scroll'
+        });
 
     }
 
@@ -405,7 +426,7 @@
         // topbar doesn't publicly expose its dialog management functions, we have
         // to implement matching behavior ourselves (hide other dialogs, show on hover,
         // etc.).
-        let isVisible = (dropdown.css('display') === 'block');
+        let isVisible = (dropdown.css('display') !== 'none');
         let othersVisible = ($('.network-items > .topbar-icon-on:not(#mc-roomfinder-button)').length > 0);
         let wantVisible;
         let wantOthersVisible = false;
@@ -435,7 +456,7 @@
 
         if (wantVisible) {
             dropdown.css({
-                'display': 'block',
+                'display': dropdown.data('mc-display'),
                 'left': button.position().left,
                 'top': button.position().top + $('.topbar').height()
             });
