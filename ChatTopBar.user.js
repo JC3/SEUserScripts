@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.11
+// @version      1.11.1
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -519,7 +519,7 @@
         // Hide/show native topbar dropdowns as needed.
         if (source && (othersVisible !== wantOthersVisible)) {
             if (wantOthersVisible)
-                log(`TODO: I wanted to show another topbar dropdown (${source.getAttribute('class')}), but I don't know how.`, true);
+                source.click();
             else
                 window.frames[0].StackExchange.topbar.hideAll();
         }
@@ -758,7 +758,7 @@
             return;
 
         let oldVersion = load('changesViewedFor', null);
-        let newVersion = GM_info.script.version;
+        let newVersion = /^([0-9]+\.[0-9]+)/.exec(GM_info.script.version)[1]; // no flashing for minor versions.
         if (oldVersion === newVersion)
             return;
         else
