@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.10-dev5
+// @version      1.11-dev1
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -389,7 +389,9 @@
         let search;
         let roomlist;
         let dropdown = $('<div class="topbar-dialog" id="mc-roomfinder-dialog"/>')
-            .append($('<div class="header"><h3>chat rooms</h3></div>'))
+            .append($('<div class="header" style="padding-top:0;padding-bottom:0;">')
+                    .append($('<h3 style="padding-top:7px;padding-bottom:7px;">chat rooms</h3>'))
+                    .append($('<select id="mc-roomfinder-tab"></select></div>')))
             .append(search = $('<div class="modal-content"/>'))
             .append(roomlist = $('<div class="modal-content" id="mc-roomfinder-results"/>'))
             .appendTo(topbar.find('.js-topbar-dialog-corral'))
@@ -414,6 +416,12 @@
         $('<div class="mc-result-container" id="mc-result-more"\>')
             .text('No results.')
             .appendTo(roomlist);
+        $('#mc-roomfinder-tab')
+            .append($('<option/>').text('all'))
+            .append($('<option/>').text('mine'))
+            .append(window.location.hostname === 'chat.meta.stackexchange.com' ? '' : $('<option/>').text('site'))
+            .append($('<option/>').text('favorite'))
+            .change(function () { doRoomSearch(); });
         dropdown.find('.header, .model-content').css('flex-shrink', '0');
         dropdown.find('.modal-content').css('padding', 0);
         search.find('button').click(() => (doRoomSearch(), false));
@@ -435,8 +443,12 @@
             '.mc-result-users { }\n' +
             '.mc-result-activity { float: right; }\n' +
             '#mc-result-more { color: #999; }\n' +
-            '.mc-result-more-link { font-weight: bold; color: #0077cc !important; }\n')
+            '.mc-result-more-link { font-weight: bold; color: #0077cc !important; }\n' +
+            '#mc-roomfinder-tab { border: 1px solid #cbcbcb; box-shadow: inset 0 1px 2px #eff0f1,0 0 0 #FFF; color: #2f3337; }\n')
             .prependTo(dropdown);
+
+        // Site input does this but I don't really like it on the dropdown:
+        // #mc-roomfinder-tab:hover { border-color: rgba(0,149,255,0.5); box-shadow: inset 0 1px 2px #e4e6e8,0 0 2px rgba(0,119,204,0.1); }
 
         // Sets search button visibility.
         setAutoSearch();
@@ -542,10 +554,12 @@
         let status = $('#mc-result-more');
         let sinput = $('#mc-roomfinder-filter');
         let sbutton = $('#mc-roomfinder-go');
+        let stab = $('#mc-roomfinder-tab');
         let params;
 
         sinput.prop('disabled', !sinput.data('mc-auto'));
         sbutton.prop('disabled', true);
+        stab.prop('disabled', true);
         status.removeClass('mc-result-more-link');
 
         // New search vs. loading more results.
@@ -562,7 +576,7 @@
             res.find('.mc-result-card').remove();
             // First page, use filter from text box and store it.
             params = {
-                tab: 'all',
+                tab: stab.val(),
                 sort: 'active',
                 filter: sinput.val().trim(),
                 pageSize: 20,
@@ -614,6 +628,7 @@
         }).always(function () {
             sinput.prop('disabled', false);
             sbutton.prop('disabled', false);
+            stab.prop('disabled', false);
             if (!sinput.data('mc-auto'))
                 sinput.focus();
         });
