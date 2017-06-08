@@ -25,15 +25,15 @@
 
    window.addEventListener("tb-setvalue", function(ev)
    {
-      if ( typeof ev.key !== "string" || typeof ev.value !== "string") return;
+      if ( typeof ev.detail.key !== "string" || typeof ev.detail.value !== "string") return;
       
-      GM_setValue(ev.key, ev.value);
+      GM_setValue(ev.detail.key, ev.detail.value);
    });
 
    window.addEventListener("tb-deletevalue", function(ev)
    {
-      if ( typeof ev.key !== "string" ) return;
-      GM_deleteValue(ev.key);
+      if ( typeof ev.detail.key !== "string" ) return;
+      GM_deleteValue(ev.detail.key);
    });
 
    function with_jquery(f, data) 
@@ -1141,21 +1141,32 @@ function MakeChatTopbar($, tbData)
     function forgetSetting(key)
     {
        delete tbData.settings[key];
-       window.dispatchEvent(new CustomEvent("tb-setvalue", {key: key}));
+       window.dispatchEvent(new CustomEvent("tb-deletevalue", {detail: {key: key}}));
     }
 
     // Helper for GM_setValue.
-    function store (key, value) 
+    function store(key, value) 
     {
+       // only strings allowed
+       value = String(value);
        tbData.settings[key] = value;
-      window.dispatchEvent(new CustomEvent("tb-deletevalue", {key: key, value: value}));
+      window.dispatchEvent(new CustomEvent("tb-setvalue", {detail: {key: key, value: value}}));
     }
 
     // Helper for GM_getValue.
-    function load (key, def) 
+    function load(key, def) 
     {
        if ( typeof tbData.settings[key] === "undefined" ) return def;
-       return tbData.settings[key];
+       
+       var ret = tbData.settings[key];
+       
+       //coerce the type based on the default value, for convenience and compatibility
+       if ( typeof def === "boolean" )
+         ret = ret !== "false" && ret !== "";
+       else if ( typeof def === "number" )
+         ret = Number(ret);
+       
+      return ret;
     }
 
     // Helper for console.log.
