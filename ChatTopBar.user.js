@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.10-dev4
+// @version      1.10-dev5
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -42,6 +42,7 @@
     }
 
     const RECONNECT_WAIT_MS = 500;
+    const AUTO_SEARCH_DELAY_MS = 500;
     const URL_UPDATES = 'https://stackapps.com/q/7404/25350';
     const URL_MORE = 'https://stackapps.com/search?tab=active&q=user%3a25350%20is%3aq%20%5bscript%5d%20';
 
@@ -98,6 +99,7 @@
         setShowSwitcher: setShowSwitcher,
         setRejoinOnSwitch: setRejoinOnSwitch,
         setOpenRoomsHere: setOpenRoomsHere,
+        setAutoSearch: setAutoSearch,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
@@ -436,6 +438,40 @@
             '.mc-result-more-link { font-weight: bold; color: #0077cc !important; }\n')
             .prependTo(dropdown);
 
+        // Sets search button visibility.
+        setAutoSearch();
+
+        let filter = $('#mc-roomfinder-filter');
+        let timerId;
+        filter.keyup(function (e) {
+            let auto = filter.data('mc-auto');
+
+            // Enter key searches.
+            if (e.keyCode == 13 && !auto)
+                $('#mc-roomfinder-go').click();
+
+            // Do auto search 1 second after last key pressed.
+            if (timerId) {
+                window.clearTimeout(timerId);
+                timerId = null;
+            }
+            if (auto) {
+                timerId = window.setTimeout(function () {
+                    let cur = filter.val().trim();
+                    let old = (filter.data('mc-last-auto') || '');
+                    if (cur !== old) {
+                        //console.log(`filter change ${old} => ${cur}`);
+                        filter.data('mc-last-auto', cur);
+                        if (filter.data('mc-auto')) {
+                            //console.log('auto search');
+                            doRoomSearch();
+                        }
+                    }
+                }, AUTO_SEARCH_DELAY_MS);
+            }
+
+        });
+
     }
 
     // Show/hide the room search dropdown.
@@ -508,7 +544,7 @@
         let sbutton = $('#mc-roomfinder-go');
         let params;
 
-        sinput.prop('disabled', true);
+        sinput.prop('disabled', !sinput.data('mc-auto'));
         sbutton.prop('disabled', true);
         status.removeClass('mc-result-more-link');
 
@@ -533,6 +569,7 @@
                 nohide: false
             };
             res.data('mc-params', params);
+            sinput.data('mc-last-auto', sinput.val());
         }
 
         // Run search.
@@ -562,7 +599,7 @@
                     .text('Load More...')
                     .click(() => (doRoomSearch(true), false))
                     .appendTo(res);
-            } else if (doc.find('.mc-result-card').length === 0) {
+            } else if (res.find('.mc-result-card').length === 0) {
                 status
                     .removeClass('mc-result-more-link')
                     .toggle(true)
@@ -577,6 +614,8 @@
         }).always(function () {
             sinput.prop('disabled', false);
             sbutton.prop('disabled', false);
+            if (!sinput.data('mc-auto'))
+                sinput.focus();
         });
 
     }
@@ -609,6 +648,7 @@
                 '<label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>' +
                 '<label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>' +
                 '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
+                '<label><input type="checkbox" name="autosearch" onchange="ChatTopBar.setAutoSearch(this.checked)"><span>Search for rooms as you type</span></label>' +
                 '<label><input type="checkbox" name="open" onchange="ChatTopBar.setOpenRoomsHere(this.checked)"><span>Open search result rooms in this tab</span></label>' +
                 '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
                 '<hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>' +
@@ -671,6 +711,7 @@
             dialog.find('[name="quiet"]').prop('checked', setQuiet());
             dialog.find('[name="rejoin"]').prop('checked', setRejoinOnSwitch());
             dialog.find('[name="switch"]').prop('checked', setShowSwitcher());
+            dialog.find('[name="autosearch"]').prop('checked', setAutoSearch());
             dialog.find('[name="open"]').prop('checked', setOpenRoomsHere());
             dialog.find('#ctb-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
@@ -746,6 +787,11 @@
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
             $('body').append(
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
+                '<li class="ctb-version-item">1.10<li><ul>' +
+                '<li>Search for chat rooms from the top bar! Click the chat icon near the left. Supports search-as-you-type (can be disabled), and optionally ' +
+                'lets you open rooms in the current tab. Try it! Check settings dialog for new options.' +
+                '<li><span>ChatTopBar</span> new functions for search options.' +
+                '<li>Cleaner list styling in the change log dialog.</ul>' +
                 '<li class="ctb-version-item">1.09<li><ul>' +
                 '<li>Clicking site search box in SE dropdown no longer closes dropdown.' +
                 '<li>Also, search box didn\'t work, anyways. Now it does.' +
@@ -796,13 +842,13 @@
             $('#ctb-changes-list span').css({'font-family': 'monospace', 'color': '#666'});
             $('#ctb-changes-list ul li').each(function(_, li) {
                 let item = $(li);
-                let text = item.text();
+                let html = item.html();
                 item
                     .text('')
                     .css('display', 'flex')
                     .css('margin-top', '0.25ex')
                     .append($('<div>•</div>').css('margin-right', '0.75ex'))
-                    .append($('<div/>').text(text));
+                    .append($('<div/>').html(html));
             });
         }
 
@@ -965,6 +1011,21 @@
             $('.mc-result-link').removeAttr('target');
 
         return open;
+
+    }
+
+    // Set whether room search happens as you type, or requires you to press a button.
+    // True for as you type, false for button. Default is true. Null or undefined
+    // loads the persistent setting. Saves setting persistently. Returns the value
+    // of the option.
+    function setAutoSearch (auto) {
+
+        auto = loadOrStore('autoSearch', auto, true);
+
+        $('#mc-roomfinder-go').toggle(!auto);
+        $('#mc-roomfinder-filter').data('mc-auto', auto);
+
+        return auto;
 
     }
 
