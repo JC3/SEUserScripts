@@ -804,6 +804,10 @@
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
             $('body').append(
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
+                '<li class="ctb-version-item">1.11<li><ul>' +
+                '<li>Chat room search contains selector for room tab (all, mine, favorites).' +
+                '<li>Default search sort order is now by people, with option to use activity instead.' +
+                '<li><span>ChatTopBar.setSearchByActivity</span> to change sort order option.</ul>' +
                 '<li class="ctb-version-item">1.10<li><ul>' +
                 '<li>Search for chat rooms from the top bar! Click the chat icon near the left. Supports search-as-you-type (can be disabled), and optionally ' +
                 'lets you open rooms in the current tab. Try it! Check settings dialog for new options.' +
