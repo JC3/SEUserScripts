@@ -601,53 +601,63 @@
             $('body').append(
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
                 '<li class="ctb-version-item">1.09<li><ul>' +
-                '<li>• Clicking site search box in SE dropdown no longer closes dropdown.' +
-                '<li>• Also, search box didn\'t work, anyways. Now it does.' +
-                '<li>• Mousewheel over-scrolling on topbar dropdowns no longer scrolls chat.</ul>' +
+                '<li>Clicking site search box in SE dropdown no longer closes dropdown.' +
+                '<li>Also, search box didn\'t work, anyways. Now it does.' +
+                '<li>Mousewheel over-scrolling on topbar dropdowns no longer scrolls chat.</ul>' +
                 '<li class="ctb-version-item">1.08<li><ul>' +
-                '<li>• Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
-                '<li>• Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
-                '<li>• Brightness setting is now associated with the current room\'s theme rather than the room itself (so it applies to all rooms with the same theme). ' +
+                '<li>Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
+                '<li>Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
+                '<li>Brightness setting is now associated with the current room\'s theme rather than the room itself (so it applies to all rooms with the same theme). ' +
                 'Apologies for any reset settings (it does make a good attempt to copy them, though).' +
-                '<li>• Change log now displayed after update (when flashing "topbar" link clicked).' +
-                '<li>• <span>ChatTopBar.showChangeLog()</span> will always show the change log, too.' +
-                '<li>• <span>ChatTopBar</span> functions for additional settings added.' +
-                '<li>• Don\'t load jQuery UI if it\'s already loaded.' +
-                '<li>• Don\'t run in iframes (by default), for compatibility with some other scripts. <span>ChatTopBar.setRunInFrame()</span> can control this.' +
-                '<li>• Don\'t run in mobile chat layout, for compatibility with some other scripts..</ul>' +
+                '<li>Change log now displayed after update (when flashing "topbar" link clicked).' +
+                '<li><span>ChatTopBar.showChangeLog()</span> will always show the change log, too.' +
+                '<li><span>ChatTopBar</span> functions for additional settings added.' +
+                '<li>Don\'t load jQuery UI if it\'s already loaded.' +
+                '<li>Don\'t run in iframes (by default), for compatibility with some other scripts. <span>ChatTopBar.setRunInFrame()</span> can control this.' +
+                '<li>Don\'t run in mobile chat layout, for compatibility with some other scripts..</ul>' +
                 '<li class="ctb-version-item">1.07<li><ul>' +
-                '<li>• Settings dialog (accessible from "topbar" link in footer).' +
-                '<li>• Wide mode now matches right side padding instead of fixed at 95%.' +
-                '<li>• More descriptive search box placeholders.' +
-                '<li>• <span>ChatTopBar.forgetEverything</span>, for testing.</ul>' +
+                '<li>Settings dialog (accessible from "topbar" link in footer).' +
+                '<li>Wide mode now matches right side padding instead of fixed at 95%.' +
+                '<li>More descriptive search box placeholders.' +
+                '<li><span>ChatTopBar.forgetEverything</span>, for testing.</ul>' +
                 '<li class="ctb-version-item">1.06<li><ul>' +
-                '<li>• Brightness now only applied if theme enabled.' +
-                '<li>• Sidebar resized so it doesn\'t hide behind the bottom panel.' +
-                '<li>• <span>ChatTopBar.fakeUnreadCounts(inbox,rep)</span> for debugging.' +
-                '<li>• Explicit <span>unsafeWindow</span> grant.' +
-                '<li>• Sort output of <span>dumpSettings()</span>.</ul>' +
+                '<li>Brightness now only applied if theme enabled.' +
+                '<li>Sidebar resized so it doesn\'t hide behind the bottom panel.' +
+                '<li><span>ChatTopBar.fakeUnreadCounts(inbox,rep)</span> for debugging.' +
+                '<li>Explicit <span>unsafeWindow</span> grant.' +
+                '<li>Sort output of <span>dumpSettings()</span>.</ul>' +
                 '<li class="ctb-version-item">1.05<li><ul>' +
-                '<li>• Per-room icon/text brightness option.' +
-                '<li>• Option to suppress console output.' +
-                '<li>• Ability to dump settings to console for testing.' +
-                '<li>• Fixed a style bug where things were happening before CSS was loaded, was sometimes causing non-themed topbar to have a white background instead of black.</ul>' +
+                '<li>Per-room icon/text brightness option.' +
+                '<li>Option to suppress console output.' +
+                '<li>Ability to dump settings to console for testing.' +
+                '<li>Fixed a style bug where things were happening before CSS was loaded, was sometimes causing non-themed topbar to have a white background instead of black.</ul>' +
                 '<li class="ctb-version-item">1.03<li><ul>' +
-                '<li>• <span>ChatTopBar</span> console interface for setting options.' +
-                '<li>• Widen / theme options now user-settable.' +
-                '<li>• Ability to forget cached account ID for testing.</ul>' +
+                '<li><span>ChatTopBar</span> console interface for setting options.' +
+                '<li>Widen / theme options now user-settable.' +
+                '<li>Ability to forget cached account ID for testing.</ul>' +
                 '<li class="ctb-version-item">1.02<li><ul>' +
-                '<li>• WebSocket reconnect when connection lost.' +
-                '<li>• Beta code for themed topbar.' +
-                '<li>• Better console logging.</ul>' +
+                '<li>WebSocket reconnect when connection lost.' +
+                '<li>Beta code for themed topbar.' +
+                '<li>Better console logging.</ul>' +
                 '<li class="ctb-version-item">1.01<li><ul>' +
-                '<li>• Realtime event handling via websocket.</ul>' +
+                '<li>Realtime event handling via websocket.</ul>' +
                 '<li class="ctb-version-item">1.00<li><ul>' +
-                '<li>• Initial version.</ul>' +
+                '<li>Initial version.</ul>' +
                 '</ul></div>');
             $('.ctb-version-item, .ctb-important').css({'margin-top': '1.5ex', 'font-size': '120%'});
             $('.ctb-version-item').css({'font-weight': 'bold'});
             $('#ctb-changes-list ul').css('margin-left', '2ex');
-            $('#ctb-changes-list span').css({'font-family': 'monospace', 'color': '#00a'});
+            $('#ctb-changes-list span').css({'font-family': 'monospace', 'color': '#666'});
+            $('#ctb-changes-list ul li').each(function(_, li) {
+                let item = $(li);
+                let text = item.text();
+                item
+                    .text('')
+                    .css('display', 'flex')
+                    .css('margin-top', '0.25ex')
+                    .append($('<div>•</div>').css('margin-right', '0.75ex'))
+                    .append($('<div/>').text(text));
+            });
         }
 
         $('#ctb-changes-dialog').dialog({
