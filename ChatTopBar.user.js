@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.10-dev2
+// @version      1.10-dev3
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -97,6 +97,7 @@
         setQuiet: setQuiet,
         setShowSwitcher: setShowSwitcher,
         setRejoinOnSwitch: setRejoinOnSwitch,
+        setOpenRoomsHere: setOpenRoomsHere,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
@@ -151,12 +152,15 @@
 
         // Hide topbar dropdowns (and settings dialog) on click (the SE JS object is in the frame).
         $(window).click(function (e) {
-            if (e.target.tagName.toLowerCase() === 'a' || $(e.target).closest('.topbar-dialog').length === 0)
+            if (e.target.tagName.toLowerCase() === 'a' || $(e.target).closest('.topbar-dialog').length === 0) {
                 tbframe.StackExchange.topbar.hideAll();
+                toggleRoomSearchDropdown('clickout');
+            }
             hideSettingsIfOutside(e.target);
         });
         $('.avatar, .action-link, #room-menu').click(function (e) {
             tbframe.StackExchange.topbar.hideAll();
+            toggleRoomSearchDropdown('clickout');
             hideSettingsIfOutside(e.target);
         });
 
@@ -385,7 +389,7 @@
         let dropdown = $('<div class="topbar-dialog" id="mc-roomfinder-dialog"/>')
             .append($('<div class="header"><h3>chat rooms</h3></div>'))
             .append(search = $('<div class="modal-content"/>'))
-            .append(roomlist = $('<div class="modal-content"/>'))
+            .append(roomlist = $('<div class="modal-content" id="mc-roomfinder-results"/>'))
             .appendTo(topbar.find('.js-topbar-dialog-corral'))
             .data('mc-display', 'flex')
             .css({
@@ -398,21 +402,34 @@
             });
         $('<div class="site-filter-container"/>')
             .css('display', 'flex')
-            .append($('<input type="text" class="site-filter-input" placeholder="Find a chat room"/>').css('flex-grow', '1'))
-            .append($('<button>SEARCH</button>').css({
+            .append($('<input type="text" class="site-filter-input" id="mc-roomfinder-filter" placeholder="Find a chat room"/>').css('flex-grow', '1'))
+            .append($('<button id="mc-roomfinder-go">SEARCH</button>').css({
                 'margin': '5px 0 5px 5px',
                 'padding': '3px',
                 'font-size': '11px'
             }))
             .appendTo(search);
-        dropdown.find('.header .model-content').css('flex-shrink', '0');
+        dropdown.find('.header, .model-content').css('flex-shrink', '0');
         dropdown.find('.modal-content').css('padding', 0);
+        search.find('button').click(() => (doRoomSearch(), false));
         roomlist.css({
             'flex-grow': '1',
             'max-height': 'none',
             'overflow-x': 'hidden',
             'overflow-y': 'scroll'
         });
+
+        // I'm sick of typing .css() everywhere. Style the search results in a stylesheet.
+        $('<style type="text/css"/>').text(
+            '.mc-result-container { padding: 10px; border-top: 1px solid #eff0f1; line-height: 1.3; }\n' +
+            '.mc-result-container:hover { background: #f7f8f8; }\n' +
+            '.mc-result-link { }\n' +
+            '.mc-result-title { margin-bottom: 4px; }\n' +
+            '.mc-result-description { margin-bottom: 4px; color: #2f3337; }\n' +
+            '.mc-result-info { color: #848d95; }\n' +
+            '.mc-result-users { }\n' +
+            '.mc-result-activity { float: right; }\n')
+            .prependTo(dropdown);
 
     }
 
@@ -431,19 +448,22 @@
         let wantVisible;
         let wantOthersVisible = false;
 
-        if ((why || 'click') === 'click') {
+        // All the logic for topbar-compatible click/hover behavior is here:
+        if ((why || 'click') === 'click') {  // Clicked on the icon.
             wantVisible = !isVisible;
-        } else if (why === 'enter') {
+        } else if (why === 'enter') {        // Mouse entered the icon.
             wantVisible = isVisible || othersVisible;
-        } else if (why === 'away') {
+        } else if (why === 'away') {         // Mouse left the icon.
             wantVisible = false;
             wantOthersVisible = isVisible || othersVisible;
+        } else if (why === 'clickout') {     // Clicked outside the dialog.
+            wantVisible = false;
+            wantOthersVisible = othersVisible;
         } else {
             return;
         }
 
-        // console.log(`toggle ${why} ${isVisible}=>${wantVisible} others:${othersVisible}=>${wantOthersVisible}`);
-
+        // Hide/show native topbar dropdowns as needed.
         if (source && (othersVisible !== wantOthersVisible)) {
             if (wantOthersVisible)
                 log(`TODO: I wanted to show another topbar dropdown (${source.getAttribute('class')}), but I don\'t know how.`, true);
@@ -451,21 +471,78 @@
                 window.frames[0].StackExchange.topbar.hideAll();
         }
 
-        if (isVisible === wantVisible)
-            return;
-
-        if (wantVisible) {
-            dropdown.css({
-                'display': dropdown.data('mc-display'),
-                'left': button.position().left,
-                'top': button.position().top + $('.topbar').height()
-            });
-            button.addClass('topbar-icon-on');
-        } else {
-            dropdown.css('display', 'none');
-            button.removeClass('topbar-icon-on');
+        // Hide/show room search dropdown as needed.
+        if (isVisible !== wantVisible) {
+            if (wantVisible) {
+                dropdown.css({
+                    'display': dropdown.data('mc-display'),
+                    'left': button.position().left,
+                    'top': button.position().top + $('.topbar').height()
+                });
+                button.addClass('topbar-icon-on');
+            } else {
+                dropdown.css('display', 'none');
+                button.removeClass('topbar-icon-on');
+            }
         }
 
+    }
+
+    // Perform room search.
+    function doRoomSearch () {
+
+        let res = $('#mc-roomfinder-results');
+        let sinput = $('#mc-roomfinder-filter');
+        let sbutton = $('#mc-roomfinder-go');
+        let filter = sinput.val().trim();
+
+        // Clear existing results.
+        res.text('Loading...');
+        sinput.prop('disabled', true);
+        sbutton.prop('disabled', true);
+
+        // Run search.
+        $.post('/rooms', {
+            tab: 'all',
+            sort: 'active',
+            filter: filter,
+            pageSize: 20,
+            nohide: false
+        }).then(function (html) {
+            res.empty();
+            let doc = $('<div/>').html(html);
+            doc.find('.roomcard').each(function (_, roomcard) {
+                roomcard = $(roomcard);
+                let result = {
+                    name: roomcard.find('.room-name').text().trim(),
+                    description: roomcard.find('.room-description').html().trim(),
+                    activity: roomcard.find('.last-activity').html().trim(),
+                    users: Number(roomcard.find('.room-users').attr('title').replace(/[^0-9]/g, '')),
+                    id: Number(roomcard.attr('id').replace(/[^0-9]/g, ''))
+                };
+                $('<div class="mc-result-container"\>')
+                    .append($(`<a href="//${window.location.hostname}/rooms/${result.id}" class="mc-result-link"/>`)
+                        .append($(`<div class="mc-result-title">${escape(result.name)}</div>`))
+                        .append($(`<div class="mc-result-description">${result.description}</div>`)))
+                    .append($(`<div class="mc-result-info"><span class="mc-result-users">${withs(result.users, 'user')}</span><span class="mc-result-activity">${result.activity}</span></div>`))
+                    .appendTo(res);
+            });
+            setOpenRoomsHere();
+        }).fail(function (e) {
+            res.text('An error occurred.');
+        }).always(function () {
+            sinput.prop('disabled', false);
+            sbutton.prop('disabled', false);
+        });
+
+    }
+
+    function escape (str) {
+        return str.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;');
+    }
+
+    function withs (n, str) {
+        return (n === 1) ? `${n} ${str}` : `${n} ${str}s`;
     }
 
     // Show settings popup.
@@ -486,6 +563,7 @@
                 '<label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>' +
                 '<label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>' +
                 '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
+                '<label><input type="checkbox" name="open" onchange="ChatTopBar.setOpenRoomsHere(this.checked)"><span>Open search result rooms in this tab</span></label>' +
                 '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
                 '<hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>' +
                 '<div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>' +
@@ -547,6 +625,7 @@
             dialog.find('[name="quiet"]').prop('checked', setQuiet());
             dialog.find('[name="rejoin"]').prop('checked', setRejoinOnSwitch());
             dialog.find('[name="switch"]').prop('checked', setShowSwitcher());
+            dialog.find('[name="open"]').prop('checked', setOpenRoomsHere());
             dialog.find('#ctb-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
         }
@@ -824,6 +903,22 @@
         });
 
         return rejoin;
+
+    }
+
+    // Set whether or not rooms chosen from the room finder load in this frame or a
+    // new tab. Default is true (this frame). Null or undefined loads the persistent
+    // setting. Saves setting persistently. Returns the value of the option.
+    function setOpenRoomsHere (open) {
+
+        open = loadOrStore('openRoomsHere', open, true);
+
+        if (open)
+            $('.mc-result-link').attr('target', '_top');
+        else
+            $('.mc-result-link').removeAttr('target');
+
+        return open;
 
     }
 
