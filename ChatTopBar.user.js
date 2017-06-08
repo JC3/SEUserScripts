@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.11-dev1
+// @version      1.11-dev2
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -100,6 +100,7 @@
         setRejoinOnSwitch: setRejoinOnSwitch,
         setOpenRoomsHere: setOpenRoomsHere,
         setAutoSearch: setAutoSearch,
+        setSearchByActivity: setSearchByActivity,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
@@ -416,10 +417,9 @@
         $('<div class="mc-result-container" id="mc-result-more"\>')
             .text('No results.')
             .appendTo(roomlist);
-        $('#mc-roomfinder-tab')
+        $('#mc-roomfinder-tab') // Note: 'site' is not currently useful, requires a host and I have no UI for it.
             .append($('<option/>').text('all'))
             .append($('<option/>').text('mine'))
-            .append(window.location.hostname === 'chat.meta.stackexchange.com' ? '' : $('<option/>').text('site'))
             .append($('<option/>').text('favorite'))
             .change(function () { doRoomSearch(); });
         dropdown.find('.header, .model-content').css('flex-shrink', '0');
@@ -577,7 +577,7 @@
             // First page, use filter from text box and store it.
             params = {
                 tab: stab.val(),
-                sort: 'active',
+                sort: setSearchByActivity() ? 'active' : 'people',
                 filter: sinput.val().trim(),
                 pageSize: 20,
                 nohide: false
@@ -617,7 +617,7 @@
                 status
                     .removeClass('mc-result-more-link')
                     .toggle(true)
-                    .text('No results.')
+                    .text(params.filter === '' ? 'No results.' : `No results for "${params.filter}".`)
                     .off('click');
             } else {
                 status.toggle(false);
@@ -664,6 +664,7 @@
                 '<label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>' +
                 '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
                 '<label><input type="checkbox" name="autosearch" onchange="ChatTopBar.setAutoSearch(this.checked)"><span>Search for rooms as you type</span></label>' +
+                '<label><input type="checkbox" name="byactivity" onchange="ChatTopBar.setSearchByActivity(this.checked)"><span>Sort rooms by activity instead of people</span></label>' +
                 '<label><input type="checkbox" name="open" onchange="ChatTopBar.setOpenRoomsHere(this.checked)"><span>Open search result rooms in this tab</span></label>' +
                 '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
                 '<hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>' +
@@ -727,6 +728,7 @@
             dialog.find('[name="rejoin"]').prop('checked', setRejoinOnSwitch());
             dialog.find('[name="switch"]').prop('checked', setShowSwitcher());
             dialog.find('[name="autosearch"]').prop('checked', setAutoSearch());
+            dialog.find('[name="byactivity"]').prop('checked', setSearchByActivity());
             dialog.find('[name="open"]').prop('checked', setOpenRoomsHere());
             dialog.find('#ctb-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
@@ -1041,6 +1043,15 @@
         $('#mc-roomfinder-filter').data('mc-auto', auto);
 
         return auto;
+
+    }
+
+    // Set whether to sort room search results by activity instead of by people. Default
+    // is false (people). Null or undefined loads the persistent setting. Saves setting
+    // persistently. Returns the value of the option.
+    function setSearchByActivity (byactivity) {
+
+        return loadOrStore('searchByActivity', byactivity, false);
 
     }
 
