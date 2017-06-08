@@ -519,7 +519,7 @@
         // Hide/show native topbar dropdowns as needed.
         if (source && (othersVisible !== wantOthersVisible)) {
             if (wantOthersVisible)
-                log(`TODO: I wanted to show another topbar dropdown (${source.getAttribute('class')}), but I don\'t know how.`, true);
+                log(`TODO: I wanted to show another topbar dropdown (${source.getAttribute('class')}), but I don't know how.`, true);
             else
                 window.frames[0].StackExchange.topbar.hideAll();
         }
