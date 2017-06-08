@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.10
+// @version      1.11
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
@@ -100,6 +100,7 @@
         setRejoinOnSwitch: setRejoinOnSwitch,
         setOpenRoomsHere: setOpenRoomsHere,
         setAutoSearch: setAutoSearch,
+        setSearchByActivity: setSearchByActivity,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
@@ -389,7 +390,9 @@
         let search;
         let roomlist;
         let dropdown = $('<div class="topbar-dialog" id="mc-roomfinder-dialog"/>')
-            .append($('<div class="header"><h3>chat rooms</h3></div>'))
+            .append($('<div class="header" style="padding-top:0;padding-bottom:0;">')
+                    .append($('<h3 style="padding-top:7px;padding-bottom:7px;">chat rooms</h3>'))
+                    .append($('<select id="mc-roomfinder-tab"></select></div>')))
             .append(search = $('<div class="modal-content"/>'))
             .append(roomlist = $('<div class="modal-content" id="mc-roomfinder-results"/>'))
             .appendTo(topbar.find('.js-topbar-dialog-corral'))
@@ -414,6 +417,11 @@
         $('<div class="mc-result-container" id="mc-result-more"\>')
             .text('No results.')
             .appendTo(roomlist);
+        $('#mc-roomfinder-tab') // Note: 'site' is not currently useful, requires a host and I have no UI for it.
+            .append($('<option/>').text('all'))
+            .append($('<option/>').text('mine'))
+            .append($('<option/>').text('favorite'))
+            .change(function () { doRoomSearch(); });
         dropdown.find('.header, .model-content').css('flex-shrink', '0');
         dropdown.find('.modal-content').css('padding', 0);
         search.find('button').click(() => (doRoomSearch(), false));
@@ -435,8 +443,12 @@
             '.mc-result-users { }\n' +
             '.mc-result-activity { float: right; }\n' +
             '#mc-result-more { color: #999; }\n' +
-            '.mc-result-more-link { font-weight: bold; color: #0077cc !important; }\n')
+            '.mc-result-more-link { font-weight: bold; color: #0077cc !important; }\n' +
+            '#mc-roomfinder-tab { border: 1px solid #cbcbcb; box-shadow: inset 0 1px 2px #eff0f1,0 0 0 #FFF; color: #2f3337; }\n')
             .prependTo(dropdown);
+
+        // Site input does this but I don't really like it on the dropdown:
+        // #mc-roomfinder-tab:hover { border-color: rgba(0,149,255,0.5); box-shadow: inset 0 1px 2px #e4e6e8,0 0 2px rgba(0,119,204,0.1); }
 
         // Sets search button visibility.
         setAutoSearch();
@@ -542,10 +554,12 @@
         let status = $('#mc-result-more');
         let sinput = $('#mc-roomfinder-filter');
         let sbutton = $('#mc-roomfinder-go');
+        let stab = $('#mc-roomfinder-tab');
         let params;
 
         sinput.prop('disabled', !sinput.data('mc-auto'));
         sbutton.prop('disabled', true);
+        stab.prop('disabled', true);
         status.removeClass('mc-result-more-link');
 
         // New search vs. loading more results.
@@ -562,8 +576,8 @@
             res.find('.mc-result-card').remove();
             // First page, use filter from text box and store it.
             params = {
-                tab: 'all',
-                sort: 'active',
+                tab: stab.val(),
+                sort: setSearchByActivity() ? 'active' : 'people',
                 filter: sinput.val().trim(),
                 pageSize: 20,
                 nohide: false
@@ -603,7 +617,7 @@
                 status
                     .removeClass('mc-result-more-link')
                     .toggle(true)
-                    .text('No results.')
+                    .text(params.filter === '' ? 'No results.' : `No results for "${params.filter}".`)
                     .off('click');
             } else {
                 status.toggle(false);
@@ -614,6 +628,7 @@
         }).always(function () {
             sinput.prop('disabled', false);
             sbutton.prop('disabled', false);
+            stab.prop('disabled', false);
             if (!sinput.data('mc-auto'))
                 sinput.focus();
         });
@@ -649,6 +664,7 @@
                 '<label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>' +
                 '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
                 '<label><input type="checkbox" name="autosearch" onchange="ChatTopBar.setAutoSearch(this.checked)"><span>Search for rooms as you type</span></label>' +
+                '<label><input type="checkbox" name="byactivity" onchange="ChatTopBar.setSearchByActivity(this.checked)"><span>Sort rooms by activity instead of people</span></label>' +
                 '<label><input type="checkbox" name="open" onchange="ChatTopBar.setOpenRoomsHere(this.checked)"><span>Open search result rooms in this tab</span></label>' +
                 '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
                 '<hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>' +
@@ -712,6 +728,7 @@
             dialog.find('[name="rejoin"]').prop('checked', setRejoinOnSwitch());
             dialog.find('[name="switch"]').prop('checked', setShowSwitcher());
             dialog.find('[name="autosearch"]').prop('checked', setAutoSearch());
+            dialog.find('[name="byactivity"]').prop('checked', setSearchByActivity());
             dialog.find('[name="open"]').prop('checked', setOpenRoomsHere());
             dialog.find('#ctb-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
@@ -1026,6 +1043,15 @@
         $('#mc-roomfinder-filter').data('mc-auto', auto);
 
         return auto;
+
+    }
+
+    // Set whether to sort room search results by activity instead of by people. Default
+    // is false (people). Null or undefined loads the persistent setting. Saves setting
+    // persistently. Returns the value of the option.
+    function setSearchByActivity (byactivity) {
+
+        return loadOrStore('searchByActivity', byactivity, false);
 
     }
 
