@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.10-dev5
+// @version      1.10
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
