@@ -1,23 +1,56 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.11.1
+// @version      1.11.2
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @match        *://chat.meta.stackexchange.com/rooms/*
 // @match        *://chat.stackexchange.com/rooms/*
 // @match        *://chat.stackoverflow.com/rooms/*
-// @match        */chats/join/favorite?ctbjoin
+// @match        *://chat.meta.stackexchange.com/chats/join/favorite?ctbjoin
+// @match        *://chat.stackexchange.com/chats/join/favorite?ctbjoin
+// @match        *://chat.stackoverflow.com/chats/join/favorite?ctbjoin
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_listValues
 // @grant        GM_deleteValue
-// @grant        unsafeWindow
 // ==/UserScript==
 
 (function() {
     'use strict';
 
+   var tbData = {settings: {}, scriptVersion: GM_info.script.version};
+   for (let key of GM_listValues())
+      tbData.settings[key] = GM_getValue(key);
+
+   window.addEventListener("tb-setvalue", function(ev)
+   {
+      if ( typeof ev.detail.key !== "string" || typeof ev.detail.value !== "string") return;
+      
+      GM_setValue(ev.detail.key, ev.detail.value);
+   });
+
+   window.addEventListener("tb-deletevalue", function(ev)
+   {
+      if ( typeof ev.detail.key !== "string" ) return;
+      GM_deleteValue(ev.detail.key);
+   });
+
+   function with_jquery(f, data) 
+   {
+     var script = document.createElement("script");
+     script.type = "text/javascript";
+     script.textContent = "("  + f.toString() + ")(window.jQuery, " + JSON.stringify(data) +")" + "\n\n//# sourceURL=" + encodeURI(GM_info.script.namespace.replace(/\/?$/, "/")) + encodeURIComponent(GM_info.script.name); // make this easier to debug
+     document.body.appendChild(script);
+   }
+   
+   window.addEventListener("load", () => with_jquery(MakeChatTopbar, tbData));
+
+// from here on out, this is executed in the unprivileged context of the page itself
+function MakeChatTopbar($, tbData)
+{
+   if ( !$ ) return; // no jQuery? This is not a chat page that we can enhance!
+   
     // Auto-click the button on the favorites page if enabled. Note match rule only
     // lets this happen if '?ctbjoin' is in URL, so we're not doing this willy nilly.
     if (document.location.href.includes('/chats/join/favorite')) {
@@ -91,7 +124,7 @@
     // Provide a console interface for certain functionality. (TBD: Should I be paranoid
     // about this and not do it until *after* frame and styles are loaded? Or maybe just
     // don't expose settings change methods any more since there's a dialog now? Hmm...)
-    unsafeWindow.ChatTopBar = {
+    window.ChatTopBar = {
         setWiden: setWiden,
         setThemed: setThemed,
         setBrightness: setBrightness,
@@ -112,7 +145,7 @@
     // Once the frame is loaded, everything happens.
     frame.load(function () {
 
-        var tbframe = window.frames[0];
+        var tbframe = frame[0].contentWindow;
         var topbar = tbframe.$('.topbar');
         var link = topbar.parent().find('link[rel="stylesheet"][href*="topbar"]');
 
@@ -207,7 +240,7 @@
             $('#sidebar').css({
                 height: `calc(100% - ${topbar.height()}px`
             });
-            $(unsafeWindow).trigger('resize'); // Force sidebar resize, guess SE does it dynamically.
+            $(window).trigger('resize'); // Force sidebar resize, guess SE does it dynamically.
 
         });
 
@@ -521,7 +554,7 @@
             if (wantOthersVisible)
                 source.click();
             else
-                window.frames[0].StackExchange.topbar.hideAll();
+                frame[0].contentWindow.StackExchange.topbar.hideAll();
         }
 
         // Hide/show room search dropdown as needed.
@@ -656,7 +689,7 @@
 
         // Initialize dialog first time through.
         if ($('#ctb-settings-dialog').length === 0) {
-            let title = (typeof GM_info === 'undefined' ? '' : ` (${GM_info.script.version})`);
+            let title = (typeof tbData.scriptVersion === 'undefined' ? '' : ` (${tbData.scriptVersion})`);
             $('body').append(
                 `<div id="ctb-settings-dialog" title="Settings${title}">` +
                 '<label><input type="checkbox" name="themed" onchange="ChatTopBar.setThemed(this.checked)"><span>Use chat room themes</span></label>' +
@@ -754,11 +787,11 @@
     // log visible.
     function checkUpdateNotify () {
 
-        if (typeof GM_info === 'undefined')
+        if (typeof tbData.scriptVersion === 'undefined')
             return;
 
         let oldVersion = load('changesViewedFor', null);
-        let newVersion = /^([0-9]+\.[0-9]+)/.exec(GM_info.script.version)[1]; // no flashing for minor versions.
+        let newVersion = /^([0-9]+\.[0-9]+)/.exec(tbData.scriptVersion)[1]; // no flashing for minor versions.
         if (oldVersion === newVersion)
             return;
         else
@@ -800,7 +833,7 @@
         }
 
         if ($('#ctb-changes-dialog').length === 0) {
-            let title = (typeof GM_info === 'undefined' ? '' : ` (${GM_info.script.version})`);
+            let title = (typeof tbData.scriptVersion === 'undefined' ? '' : ` (${tbData.scriptVersion})`);
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
             $('body').append(
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
@@ -970,7 +1003,7 @@
                 store(key, oldbrightness);
                 log(`Migrated old brightness setting ${oldkey} => ${key} (${oldbrightness})`);
             }
-            try { GM_deleteValue(oldkey); } catch (e) { console.error(e); }
+            try { forgetSetting(oldkey); } catch (e) { console.error(e); }
             log(`Removed obsolete brightness setting ${oldkey}`);
         }
 
@@ -1083,7 +1116,7 @@
 
     // Set notification counts, for style debugging.
     function fakeUnreadCounts (inbox, rep) {
-        window.frames[0].StackExchange.topbar.handleRealtimeMessage(JSON.stringify({
+        frame[0].contentWindow.StackExchange.topbar.handleRealtimeMessage(JSON.stringify({
             'Inbox': { 'UnreadInboxCount': inbox },
             'Achievements': { 'UnreadRepCount': rep }
         }));
@@ -1091,40 +1124,49 @@
 
     // Print all settings to console, for debugging.
     function dumpSettings () {
-        for (let key of GM_listValues().sort())
+        for (let key of Object.keys(tbData.settings).sort())
             console.log(`${key} => ${load(key)}`);
     }
 
     // Reset all settings.
-    function forgetEverything (noreload) {
-        for (let key of GM_listValues()) {
-            try {
-                GM_deleteValue(key);
-            } catch (e) {
-                console.error(e);
-            }
+    function forgetEverything (noreload) 
+    {
+        for (let key of Object.keys(tbData.settings).sort()) {
+           forgetSetting(key);
         }
         if (!noreload)
             document.location.reload();
     }
+    
+    function forgetSetting(key)
+    {
+       delete tbData.settings[key];
+       window.dispatchEvent(new CustomEvent("tb-deletevalue", {detail: {key: key}}));
+    }
 
     // Helper for GM_setValue.
-    function store (key, value) {
-        try {
-            GM_setValue(key, value);
-        } catch (e) {
-            console.error(e);
-        }
+    function store(key, value) 
+    {
+       // only strings allowed
+       value = String(value);
+       tbData.settings[key] = value;
+      window.dispatchEvent(new CustomEvent("tb-setvalue", {detail: {key: key, value: value}}));
     }
 
     // Helper for GM_getValue.
-    function load (key, def) {
-        try {
-            return GM_getValue(key, def);
-        } catch (e) {
-            console.error(e);
-            return def;
-        }
+    function load(key, def) 
+    {
+       if ( typeof tbData.settings[key] === "undefined" ) return def;
+       
+       var ret = tbData.settings[key];
+       
+       //coerce the type based on the default value, for convenience and compatibility
+       if ( typeof def === "boolean" )
+         ret = ret !== "false" && ret !== "";
+       else if ( typeof def === "number" )
+         ret = Number(ret);
+       
+      return ret;
     }
 
     // Helper for console.log.
@@ -1133,4 +1175,6 @@
             console.log(`Chat Top Bar: ${msg}`);
     }
 
+ }
 })();
+
