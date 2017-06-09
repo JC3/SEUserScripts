@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.12-dev1
+// @version      1.12-dev2
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -36,7 +36,7 @@
         GM_deleteValue(ev.detail.key);
     });
 
-    function with_jquery(f, data) 
+    function with_jquery(f, data)
     {
         var script = document.createElement("script");
         script.type = "text/javascript";
@@ -46,9 +46,10 @@
 
     window.addEventListener("load", () => with_jquery(MakeChatTopbar, tbData));
 
-// from here on out, this is executed in the unprivileged context of the page itself
+    // from here on out, this is executed in the unprivileged context of the page itself
 function MakeChatTopbar($, tbData)
 {
+
     if ( !$ ) return; // no jQuery? This is not a chat page that we can enhance!
 
     // Auto-click the button on the favorites page if enabled. Note match rule only
@@ -1043,6 +1044,28 @@ function MakeChatTopbar($, tbData)
         return widen;
 
     }
+    
+    // Get background styles. This is necessary now for Firefox support. Firefox
+    // doesn't make this as easy as Chrome. Chrome always returns the full background
+    // css for 'background', even if it's not set explicitly. Firefox does not, and all background
+    // related styles must be copied one at a time.
+    function getBackground (elem) {
+        
+        let bg = {
+            background: elem.css('background')
+        };
+        
+        if (!bg.background) {
+            let style = window.getComputedStyle(elem[0]);
+            for (key in style)
+                if (key.startsWith('background-'))
+                    bg[key] = style[key];
+			bg['background-position'] = undefined; // redundant with -x and -y.
+        }
+        
+        return bg;
+        
+    }
 
     // Set topbar themed option. True uses chat theme, false uses default theme, null
     // or undefined loads the persistent setting. Saves setting persistently. Returns
@@ -1053,14 +1076,20 @@ function MakeChatTopbar($, tbData)
 
         let topbar = $('.topbar');
         if (topbar.length > 0) {
+
             // First time through, store defaults.
-            if (topbar.data('original-background') === undefined) {
-                topbar.data('original-background', topbar.css('background'));
-                topbar.data('original-background-position-y', topbar.css('background-position-y'));
-            }
+            if (topbar.data('original-background') === undefined)
+                topbar.data('original-background', getBackground(topbar));
+            
             // Take background from bottom area.
-            topbar.css('background', themed ? $('#input-area').css('background') : topbar.data('original-background'))
-                  .css('background-position-y', themed ? 'bottom' : topbar.data('original-background-position-y')); // Nicer on sites like RPG.
+            if (themed) {
+                let bg = getBackground($('#input-area'));
+                bg['background-position-y'] = 'bottom'; // Nicer on sites like RPG.
+                topbar.css(bg);
+            } else {
+                topbar.css(topbar.data('original-background'));
+            }
+            
         }
 
         setBrightness();
