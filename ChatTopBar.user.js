@@ -878,6 +878,9 @@
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
             $('body').append(
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
+                '<li class="ctb-version-item">1.11.3<li><ul>' +
+                '<li>Room dropdown button brightness fixed to match other buttons.' +
+                '<li>Also, theme brightness was being applied twice to that button.</ul>' +
                 '<li class="ctb-version-item">1.11.2<li><ul>' +
                 '<li>Fix match patterns to not run on room info pages.' +
                 '<li>Make flag icon (blue notifications on right) disappear on click.' +
