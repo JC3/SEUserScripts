@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.12.1
+// @version      1.12.2
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -14,7 +14,6 @@
 // @grant        GM_setValue
 // @grant        GM_listValues
 // @grant        GM_deleteValue
-// @grant        unsafeWindow
 // ==/UserScript==
 
 (function() {
@@ -39,38 +38,19 @@
         GM_deleteValue(ev.detail.key);
     });
 
-    // For Firefox support the script is injected directly into the page and run on window.load.
-    // However, this introduces issues in Chrome where sometimes the window load event isn't
-    // called (presumably if the GM script isn't run in time). It especially happens when switching
-    // chat rooms or on page refresh. So for Chrome we do it the old way of executing the script
-    // directly, and we need to use unsafeWindow again (for the ChatTopBar object and for the
-    // resize event trigger when setting up the sidebar).
-    if (window.chrome) {
-
-        //console.log('Chrome detected, executing script directly...');
-        MakeChatTopbar($, tbData, unsafeWindow);
-
-    } else {
-
-        //console.log('Firefox detected, injecting script and running via load event...');
-
-        // Firefox support: Make this easier to debug in FF.
-        function with_jquery (f, data) {
-            var script = document.createElement('script');
-            script.type = 'text/javascript';
-            script.textContent = '('  + f.toString() + ')(window.jQuery, ' + JSON.stringify(data) + ', window)' +
-                '\n\n//# sourceURL=' + encodeURI(GM_info.script.namespace.replace(/\/?$/, '/')) +
-                encodeURIComponent(GM_info.script.name);
-            document.body.appendChild(script);
-        }
-
-        // Firefox support: Run on load event instead of directly.
-        window.addEventListener('load', () => with_jquery(MakeChatTopbar, tbData));
-
-    }
+    // Firefox support: Make this easier to debug in FF. Instead of letting GM/Tampermonkey
+    // run the script, inject it into the page and run it from there.
+    (function (f, data) {
+        var script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.textContent = '('  + f.toString() + ')(window.jQuery, ' + JSON.stringify(data) + ')' +
+            '\n\n//# sourceURL=' + encodeURI(GM_info.script.namespace.replace(/\/?$/, '/')) +
+            encodeURIComponent(GM_info.script.name);
+        document.body.appendChild(script);
+    })(MakeChatTopbar, tbData);
 
     // From here on out, this is executed in the unprivileged context of the page itself.
-function MakeChatTopbar ($, tbData, realWindow) {
+function MakeChatTopbar ($, tbData) {
 
     // No jQuery? This is not a chat page that we can enhance!
     if (!$)
@@ -149,7 +129,7 @@ function MakeChatTopbar ($, tbData, realWindow) {
     // Provide a console interface for certain functionality. (TBD: Should I be paranoid
     // about this and not do it until *after* frame and styles are loaded? Or maybe just
     // don't expose settings change methods any more since there's a dialog now? Hmm...)
-    realWindow.ChatTopBar = {
+    window.ChatTopBar = {
         setWiden: setWiden,
         setThemed: setThemed,
         setBrightness: setBrightness,
@@ -273,7 +253,7 @@ function MakeChatTopbar ($, tbData, realWindow) {
             $('#sidebar').css({
                 height: `calc(100% - ${topbar.height()}px`
             });
-            $(realWindow).trigger('resize'); // Force sidebar resize, guess SE does it dynamically.
+            $(window).trigger('resize'); // Force sidebar resize, guess SE does it dynamically.
             installReplyScrollHandler(topbar.height()); // Also take over scrolling for reply buttons, see comments there.
 
         });
@@ -936,7 +916,7 @@ function MakeChatTopbar ($, tbData, realWindow) {
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
             $('body').append(
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
-                '<li class="ctb-version-item">1.12.1<li><ul>' +
+                '<li class="ctb-version-item">1.12.2<li><ul>' +
                 '<li>Fixed an issue introduced with Firefox support where topbar sometimes didn\'t load on Chrome.</ul>' +
                 '<li class="ctb-version-item">1.12<li><ul>' +
                 '<li>Integrated Shog9\'s awesome Firefox patch. Now works on Firefox!' +
