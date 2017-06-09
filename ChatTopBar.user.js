@@ -877,6 +877,15 @@
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
             $('body').append(
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
+                '<li class="ctb-version-item">1.11.2<li><ul>' +
+                '<li>Fix match patterns to not run on room info pages.' +
+                '<li>Make flag icon (blue notifications on right) disappear on click.' +
+                '<li>Scrolling to replies no longer hides them under the topbar.' +
+                '<li>Overscrolling on change log no longer scrolls chat.' +
+                '<li>Overscrolling on room search results no longer scrolls chat.</ul>' +
+                '<li class="ctb-version-item">1.11.1<li><ul>' +
+                '<li>Topbar icon hover fixed (thanks Shog9!)' +
+                '<li>Update flasher notification now ignores revision number updates.</ul>' +
                 '<li class="ctb-version-item">1.11<li><ul>' +
                 '<li>Chat room search contains selector for room tab (all, mine, favorites).' +
                 '<li>Default search sort order is now by people, with option to use activity instead.' +
