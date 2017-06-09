@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.11.2
+// @version      1.11.3
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -438,7 +438,8 @@
                 'width': 18,
                 'height': 18,
                 'top': 8,
-                'margin': '0 9px'
+                'margin': '0 9px',
+                'filter': `brightness(${133.0/160.0})` // Make it match the other icons.
             });
         $('<a href="#" class="topbar-icon yes-hover" id="mc-roomfinder-button"/>')
             .attr('title', 'Chat room list')
@@ -1060,7 +1061,7 @@
         brightness = loadOrStore(key, brightness, 1.0);
 
         let themed = load('themed', false);
-        $('.topbar-icon, .topbar-menu-links').css('filter', `brightness(${themed ? brightness : 1.0})`);
+        $('.network-items > .topbar-icon, .topbar-menu-links').css('filter', `brightness(${themed ? brightness : 1.0})`);
 
         return brightness;
 
