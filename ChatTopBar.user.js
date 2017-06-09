@@ -19,38 +19,44 @@
 (function() {
     'use strict';
 
+    // Firefox support: Store working copy of settings in tbData.
     var tbData = {settings: {}, scriptVersion: GM_info.script.version};
     for (let key of GM_listValues())
         tbData.settings[key] = GM_getValue(key);
 
-    window.addEventListener("tb-setvalue", function(ev)
-    {
-        if ( typeof ev.detail.key !== "string" || typeof ev.detail.value !== "string") return;
-
+    // Firefox support: Use events for settings instead of GM_* directly.
+    window.addEventListener('tb-setvalue', function (ev) {
+        if (typeof ev.detail.key !== 'string' || typeof ev.detail.value !== 'string')
+            return;
         GM_setValue(ev.detail.key, ev.detail.value);
     });
 
-    window.addEventListener("tb-deletevalue", function(ev)
-    {
-        if ( typeof ev.detail.key !== "string" ) return;
+    // Firefox support: Use events for settings instead of GM_* directly.
+    window.addEventListener('tb-deletevalue', function (ev) {
+        if (typeof ev.detail.key !== 'string')
+            return;
         GM_deleteValue(ev.detail.key);
     });
 
-    function with_jquery(f, data)
-    {
-        var script = document.createElement("script");
-        script.type = "text/javascript";
-        script.textContent = "("  + f.toString() + ")(window.jQuery, " + JSON.stringify(data) +")" + "\n\n//# sourceURL=" + encodeURI(GM_info.script.namespace.replace(/\/?$/, "/")) + encodeURIComponent(GM_info.script.name); // make this easier to debug
+    // Firefox support: Make this easier to debug in FF.
+    function with_jquery (f, data) {
+        var script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.textContent = '('  + f.toString() + ')(window.jQuery, ' + JSON.stringify(data) + ')' +
+            '\n\n//# sourceURL=' + encodeURI(GM_info.script.namespace.replace(/\/?$/, '/')) +
+            encodeURIComponent(GM_info.script.name);
         document.body.appendChild(script);
     }
 
-    window.addEventListener("load", () => with_jquery(MakeChatTopbar, tbData));
+    // Firefox support: Run on load event instead of directly.
+    window.addEventListener('load', () => with_jquery(MakeChatTopbar, tbData));
 
-    // from here on out, this is executed in the unprivileged context of the page itself
-function MakeChatTopbar($, tbData)
-{
+    // From here on out, this is executed in the unprivileged context of the page itself.
+function MakeChatTopbar ($, tbData) {
 
-    if ( !$ ) return; // no jQuery? This is not a chat page that we can enhance!
+    // No jQuery? This is not a chat page that we can enhance!
+    if (!$)
+        return;
 
     // Auto-click the button on the favorites page if enabled. Note match rule only
     // lets this happen if '?ctbjoin' is in URL, so we're not doing this willy nilly.
@@ -1044,17 +1050,17 @@ function MakeChatTopbar($, tbData)
         return widen;
 
     }
-    
+
     // Get background styles. This is necessary now for Firefox support. Firefox
     // doesn't make this as easy as Chrome. Chrome always returns the full background
     // css for 'background', even if it's not set explicitly. Firefox does not, and all background
     // related styles must be copied one at a time.
     function getBackground (elem) {
-        
+
         let bg = {
             background: elem.css('background')
         };
-        
+
         if (!bg.background) {
             let style = window.getComputedStyle(elem[0]);
             for (key in style)
@@ -1062,9 +1068,9 @@ function MakeChatTopbar($, tbData)
                     bg[key] = style[key];
 			bg['background-position'] = undefined; // redundant with -x and -y.
         }
-        
+
         return bg;
-        
+
     }
 
     // Set topbar themed option. True uses chat theme, false uses default theme, null
@@ -1080,7 +1086,7 @@ function MakeChatTopbar($, tbData)
             // First time through, store defaults.
             if (topbar.data('original-background') === undefined)
                 topbar.data('original-background', getBackground(topbar));
-            
+
             // Take background from bottom area.
             if (themed) {
                 let bg = getBackground($('#input-area'));
@@ -1089,7 +1095,7 @@ function MakeChatTopbar($, tbData)
             } else {
                 topbar.css(topbar.data('original-background'));
             }
-            
+
         }
 
         setBrightness();
@@ -1248,44 +1254,43 @@ function MakeChatTopbar($, tbData)
     }
 
     // Reset all settings.
-    function forgetEverything (noreload)
-    {
-        for (let key of Object.keys(tbData.settings).sort()) {
-           forgetSetting(key);
-        }
+    function forgetEverything (noreload) {
+        for (let key of Object.keys(tbData.settings).sort())
+            forgetSetting(key);
         if (!noreload)
             document.location.reload();
     }
 
-    function forgetSetting(key)
-    {
+    // Reset one setting.
+    function forgetSetting (key) {
         delete tbData.settings[key];
-        window.dispatchEvent(new CustomEvent("tb-deletevalue", {detail: {key: key}}));
+        window.dispatchEvent(new CustomEvent('tb-deletevalue', {detail: {key: key}}));
     }
 
     // Helper for GM_setValue.
-    function store(key, value)
-    {
-        // only strings allowed
+    function store (key, value) {
+        // Only strings allowed.
         value = String(value);
         tbData.settings[key] = value;
-        window.dispatchEvent(new CustomEvent("tb-setvalue", {detail: {key: key, value: value}}));
+        window.dispatchEvent(new CustomEvent('tb-setvalue', {detail: {key: key, value: value}}));
     }
 
     // Helper for GM_getValue.
-    function load(key, def)
-    {
-        if ( typeof tbData.settings[key] === "undefined" ) return def;
+    function load (key, def) {
+
+        if (typeof tbData.settings[key] === 'undefined')
+            return def;
 
         var ret = tbData.settings[key];
 
-        //coerce the type based on the default value, for convenience and compatibility
-        if ( typeof def === "boolean" )
-            ret = ret !== "false" && ret !== "";
-        else if ( typeof def === "number" )
+        // Coerce the type based on the default value, for convenience and compatibility
+        if (typeof def === 'boolean')
+            ret = ret !== 'false' && ret !== '';
+        else if (typeof def === 'number')
             ret = Number(ret);
 
         return ret;
+
     }
 
     // Helper for console.log.
