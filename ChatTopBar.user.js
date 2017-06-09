@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.12-dev2
+// @version      1.12
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -920,7 +920,8 @@ function MakeChatTopbar ($, tbData) {
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
                 '<li class="ctb-version-item">1.12<li><ul>' +
                 '<li>Integrated Shog9\'s awesome Firefox patch. Now works on Firefox!' +
-                '<li>Patch also lets it work on internal company chat rooms (which have an extra iframe).</ul>' +
+                '<li>Patch also lets it work on internal company chat rooms (which have an extra iframe).' +
+                '<li>Chat theme code updated to work on Firefox.</ul>' +
                 '<li class="ctb-version-item">1.11.3<li><ul>' +
                 '<li>Room dropdown button brightness fixed to match other buttons.' +
                 '<li>Also, theme brightness was being applied twice to that button.</ul>' +
