@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.11.1
+// @version      1.11.2
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
-// @match        *://chat.meta.stackexchange.com/rooms/*
-// @match        *://chat.stackexchange.com/rooms/*
-// @match        *://chat.stackoverflow.com/rooms/*
+// @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
+// @include      /^https?:\/\/chat\.stackexchange\.com\/rooms\/[0-9]+.*$/
+// @include      /^https?:\/\/chat\.stackoverflow\.com\/rooms\/[0-9]+.*$/
 // @match        */chats/join/favorite?ctbjoin
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -167,6 +167,14 @@
             hideSettingsIfOutside(e.target);
         });
 
+        // The icon-flag thing is static, and does not disappear on click or respond
+        // to realtime messages. If it happened to be there, remove  it
+        // when the user clicks on it so it doesn't stick around forever.
+        topbar.find('.icon-flag').click(function () {
+            $(this).toggle(false);
+            return true;
+        });
+
         // Must wait for css to load before topbar.height() and other styles become valid.
         link.load(function () {
 
@@ -199,8 +207,8 @@
                 width: '100%'
             }).prependTo('body');
 
-            // Make room for the topbar. Sidebar must be made smaller so it doesn't hide behind
-            // the bottom panel.
+            // Do stuff to compensate for topbar size: Make room for the topbar, sidebar must
+            // be made smaller so it doesn't hide behind the bottom panel, etc.
             $('#container, #sidebar').css({
                 'margin-top': `${topbar.height()}px`
             });
@@ -208,6 +216,7 @@
                 height: `calc(100% - ${topbar.height()}px`
             });
             $(unsafeWindow).trigger('resize'); // Force sidebar resize, guess SE does it dynamically.
+            installReplyScrollHandler(topbar.height()); // Also take over scrolling for reply buttons, see comments there.
 
         });
 
@@ -300,6 +309,64 @@
 
     }
 
+    // https://github.com/JC3/SEUserScripts/issues/9: Clicking reply links scrolls
+    // to comment but hides under topbar. However, they aren't actual anchor links,
+    // the scrolling is handled in master-chat.js, so there's no target anchors to
+    // offset. Also the scrollbar is on the body so any kind of spacer we add
+    // scrolls along with chat and doesn't help. So we have to reimplement the SE
+    // scrolling behavior. This function installs a new click event handler for all
+    // .reply-info buttons on the page, and also monitors for new ones so that they
+    // can be modified as well.
+    function installReplyScrollHandler (correction) {
+
+        // Watch for new .reply-info's so we can take over their scroll behavior.
+        new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach(function (added) {
+            let id = added && added.getAttribute && added.getAttribute('id');
+            let el;
+            if (id && id.startsWith('message-') && (el = added.getElementsByClassName('reply-info')).length > 0) {
+                $(el[0]).off('click').click(() => handleReplyScroll(el[0], correction));
+            }
+        }))).observe(document.getElementById('chat'), {
+            childList: true,
+            subtree: true
+        });
+
+        // Also fix any reply-info's that may have existed before we started observing.
+        $('.reply-info').off('click').click(function () { return handleReplyScroll(this, correction); });
+
+    }
+
+    // New click handler for .reply-info items. Emulates SE behavior:
+    //   - Scroll to message if its on page, and highlight it for 2 seconds.
+    //   - Open the message in a transcript link (return true) if its not on page.
+    // The 'correction' parameter is the scroll position offset (topbar height).
+    function handleReplyScroll (reply, correction) {
+
+        let to = /#([0-9]+)/.exec(reply.getAttribute('href'));
+        if (!(to = to[1]))
+            return true;
+
+        let message = $(`#message-${to}`);
+        let target = message.closest('.user-container');
+        if (target.length === 0)
+            return true;
+
+        message.addClass('highlight');
+        window.setTimeout(function () {
+            message.removeClass('highlight');
+        }, 2000);
+
+        $('html, body').animate({
+            scrollTop: target.offset().top - correction
+        }, {
+            duration: 200,
+            queue: false
+        });
+
+        return false;
+
+    }
+
     // Install hooks necessary to add chat server list to the SE dropdown, which is loaded
     // as needed and not initially present. Be careful not to call this more than once.
     function watchSEDropdown (topbar) {
@@ -336,23 +403,28 @@
                 let isgeneric;
                 if ((isgeneric = !dropdown.hasClass('siteSwitcher-dialog'))) // only site-switcher has scrollbar at top level
                     dropdown = dropdown.find('.modal-content:first');
-                dropdown
-                    .off("mousewheel")
-                    .on("mousewheel", function (event) {
-                        // Note: grab height every time in case the dialogs aren't fully laid out
-                        // when this handler is installed, or the scroll height changes (e.g. the
-                        // SE dropdown site filter changes the scroll height).
-                        let height = isgeneric ? dropdown.outerHeight() : dropdown.height(), sheight = dropdown[0].scrollHeight;
-                        let block = ((this.scrollTop === sheight - height && event.deltaY < 0) ||
-                                     (this.scrollTop === 0 && event.deltaY > 0));
-                        return !block;
-                    });
+                blockOverscrollEvents(dropdown, isgeneric);
             }
         }))).observe(topbar.find('.js-topbar-dialog-corral')[0], {
             childList: true,
             subtree: true
         });
 
+    }
+
+    // Stop over-scrolling on an element from scrolling chat window (adapted from https://stackoverflow.com/a/10514680).
+    // outer = true to use outer height, false to use "regular" height.
+    function blockOverscrollEvents (elem, outer) {
+        elem.off("mousewheel")
+            .on("mousewheel", function (event) {
+                // Note: grab height every time in case the dialogs aren't fully laid out
+                // when this handler is installed, or the scroll height changes (e.g. the
+                // SE dropdown site filter changes the scroll height).
+                let height = outer ? elem.outerHeight() : elem.height(), sheight = elem[0].scrollHeight;
+                let block = ((this.scrollTop === sheight - height && event.deltaY < 0) ||
+                             (this.scrollTop === 0 && event.deltaY > 0));
+                return !block;
+            });
     }
 
     // Create and initialize the room search dropdown.
@@ -431,6 +503,7 @@
             'overflow-x': 'hidden',
             'overflow-y': 'scroll'
         });
+        blockOverscrollEvents(roomlist);
 
         // I'm sick of typing .css() everywhere. Style the search results in a stylesheet.
         $('<style type="text/css"/>').text(
@@ -871,6 +944,7 @@
                     .append($('<div>•</div>').css('margin-right', '0.75ex'))
                     .append($('<div/>').html(html));
             });
+            blockOverscrollEvents($('#ctb-changes-dialog'), true);
         }
 
         $('#ctb-changes-dialog').dialog({
