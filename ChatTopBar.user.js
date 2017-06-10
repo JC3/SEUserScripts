@@ -725,7 +725,7 @@ function MakeChatTopbar ($, tbData) {
                 $(`<a class="mc-result-container mc-result-card mc-result-link"\>`)
                     .attr('href', `//${window.location.hostname}/rooms/${result.id}`)
                     .append($('<div class="mc-result-title"/>').text(result.name))
-                    .append($('<div class="mc-result-description"/>').text(result.description).ctb_linkify(nolinks))
+                    .append($('<div class="mc-result-description"/>').html(result.description).ctb_linkify(nolinks))
                     .append($(`<div class="mc-result-info"><span class="mc-result-users">${withs(result.users, 'user')}</span><span class="mc-result-activity">${result.activity}</span></div>`))
                     .appendTo(res);
             });
