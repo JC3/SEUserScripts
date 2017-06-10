@@ -86,7 +86,7 @@ function MakeChatTopbar ($, tbData) {
 
     // Add a couple useful jQuery functions that we'll use below.
     $.fn.extend({
-        ctb_noclick: function () { return this.off('click').click(() => false); },
+        ctb_noclick: function () { return this.removeAttr('href').off('click').click(() => false); },
         ctb_linkify: function (no) { return no ? this : this.html(linkify(this.html())); }
     });
 
@@ -557,7 +557,7 @@ function MakeChatTopbar ($, tbData) {
         // I'm sick of typing .css() everywhere. Style the search results in a stylesheet.
         $('<style type="text/css"/>').text(
             '.mc-result-container { padding: 10px; border-top: 1px solid #eff0f1; line-height: 1.3; display:block; }\n' +
-            '.mc-result-container:hover { background: #f7f8f8; }\n' +
+            '.mc-result-container[href]:hover { background: #f7f8f8; }\n' +
             '.mc-result-container a:hover { text-decoration: underline; }\n' +
             '.mc-result-title { margin-bottom: 4px; }\n' +
             '.mc-result-description { margin-bottom: 4px; color: #2f3337; }\n' +
@@ -736,6 +736,7 @@ function MakeChatTopbar ($, tbData) {
                     .text('Load More...')
                     .off('click')
                     .click(() => (doRoomSearch(true), false))
+                    .attr('href', '#')
                     .appendTo(res);
             } else if (res.find('.mc-result-card').length === 0) {
                 status
