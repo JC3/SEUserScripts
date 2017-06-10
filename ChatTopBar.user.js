@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.12.2
+// @version      1.12.3
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -84,6 +84,12 @@ function MakeChatTopbar ($, tbData) {
     const URL_UPDATES = 'https://stackapps.com/q/7404/25350';
     const URL_MORE = 'https://stackapps.com/search?tab=active&q=user%3a25350%20is%3aq%20%5bscript%5d%20';
 
+    // Add a couple useful jQuery functions that we'll use below.
+    $.fn.extend({
+        ctb_noclick: function () { return this.off('click').click(() => false); },
+        ctb_linkify: function (no) { return no ? this : this.html(linkify(this.html())); }
+    });
+
     // The main chat server page has a topbar and is on the same domain, load it up
     // in an invisible iframe.
     var frame = $('<iframe/>')
@@ -139,6 +145,7 @@ function MakeChatTopbar ($, tbData) {
         setOpenRoomsHere: setOpenRoomsHere,
         setAutoSearch: setAutoSearch,
         setSearchByActivity: setSearchByActivity,
+        setLinkifyDescriptions: setLinkifyDescriptions,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
@@ -372,6 +379,9 @@ function MakeChatTopbar ($, tbData) {
         // Also fix any reply-info's that may have existed before we started observing.
         $('.reply-info').off('click').click(function () { return handleReplyScroll(this, correction); });
 
+        // Temporary workaround for https://meta.stackexchange.com/q/297021.
+        $('<style type="text/css">.message.highlight{margin-right:0 !important;}</style>').appendTo('head');
+
     }
 
     // New click handler for .reply-info items. Emulates SE behavior:
@@ -525,7 +535,7 @@ function MakeChatTopbar ($, tbData) {
                 'font-size': '11px'
             }))
             .appendTo(search);
-        $('<div class="mc-result-container" id="mc-result-more"\>')
+        $('<a href="#" class="mc-result-container" id="mc-result-more"\>')
             .text('No results.')
             .appendTo(roomlist);
         $('#mc-roomfinder-tab') // Note: 'site' is not currently useful, requires a host and I have no UI for it.
@@ -546,9 +556,9 @@ function MakeChatTopbar ($, tbData) {
 
         // I'm sick of typing .css() everywhere. Style the search results in a stylesheet.
         $('<style type="text/css"/>').text(
-            '.mc-result-container { padding: 10px; border-top: 1px solid #eff0f1; line-height: 1.3; }\n' +
+            '.mc-result-container { padding: 10px; border-top: 1px solid #eff0f1; line-height: 1.3; display:block; }\n' +
             '.mc-result-container:hover { background: #f7f8f8; }\n' +
-            '.mc-result-link { }\n' +
+            '.mc-result-container a:hover { text-decoration: underline; }\n' +
             '.mc-result-title { margin-bottom: 4px; }\n' +
             '.mc-result-description { margin-bottom: 4px; color: #2f3337; }\n' +
             '.mc-result-info { color: #848d95; }\n' +
@@ -677,14 +687,14 @@ function MakeChatTopbar ($, tbData) {
         // New search vs. loading more results.
         if (more && res.data('mc-params')) {
             // Update status.
-            status.toggle(true).off('click').text('Loading More...');
+            status.toggle(true).ctb_noclick().text('Loading More...');
             // Next page, from data.
             params = res.data('mc-params');
             params.page = (params.page || 1) + 1;
             res.data('mc-params', params);
         } else {
             // Clear existing results and update status.
-            status.toggle(true).off('click').text('Loading...');
+            status.toggle(true).ctb_noclick().text('Loading...');
             res.find('.mc-result-card').remove();
             // First page, use filter from text box and store it.
             params = {
@@ -700,6 +710,7 @@ function MakeChatTopbar ($, tbData) {
 
         // Run search.
         log(`Running search: ${JSON.stringify(params)}`);
+        let nolinks = !setLinkifyDescriptions();
         $.post('/rooms', params).then(function (html) {
             let doc = $('<div/>').html(html);
             doc.find('.roomcard').each(function (_, roomcard) {
@@ -711,10 +722,10 @@ function MakeChatTopbar ($, tbData) {
                     users: Number(roomcard.find('.room-users').attr('title').replace(/[^0-9]/g, '')),
                     id: Number(roomcard.attr('id').replace(/[^0-9]/g, ''))
                 };
-                $('<div class="mc-result-container mc-result-card"\>')
-                    .append($(`<a href="//${window.location.hostname}/rooms/${result.id}" class="mc-result-link"/>`)
-                        .append($(`<div class="mc-result-title">${escape(result.name)}</div>`))
-                        .append($(`<div class="mc-result-description">${result.description}</div>`)))
+                $(`<a class="mc-result-container mc-result-card mc-result-link"\>`)
+                    .attr('href', `//${window.location.hostname}/rooms/${result.id}`)
+                    .append($('<div class="mc-result-title"/>').text(result.name))
+                    .append($('<div class="mc-result-description"/>').text(result.description).ctb_linkify(nolinks))
                     .append($(`<div class="mc-result-info"><span class="mc-result-users">${withs(result.users, 'user')}</span><span class="mc-result-activity">${result.activity}</span></div>`))
                     .appendTo(res);
             });
@@ -723,6 +734,7 @@ function MakeChatTopbar ($, tbData) {
                     .addClass('mc-result-more-link')
                     .toggle(true)
                     .text('Load More...')
+                    .off('click')
                     .click(() => (doRoomSearch(true), false))
                     .appendTo(res);
             } else if (res.find('.mc-result-card').length === 0) {
@@ -730,7 +742,7 @@ function MakeChatTopbar ($, tbData) {
                     .removeClass('mc-result-more-link')
                     .toggle(true)
                     .text(params.filter === '' ? 'No results.' : `No results for "${params.filter}".`)
-                    .off('click');
+                    .ctb_noclick();
             } else {
                 status.toggle(false);
             }
@@ -745,11 +757,6 @@ function MakeChatTopbar ($, tbData) {
                 sinput.focus();
         });
 
-    }
-
-    // Sloppily escape HTML.
-    function escape (str) {
-        return str.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;');
     }
 
     // Concatenate a number to a string then pluralize a string.
@@ -777,6 +784,7 @@ function MakeChatTopbar ($, tbData) {
                 '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
                 '<label><input type="checkbox" name="autosearch" onchange="ChatTopBar.setAutoSearch(this.checked)"><span>Search for rooms as you type</span></label>' +
                 '<label><input type="checkbox" name="byactivity" onchange="ChatTopBar.setSearchByActivity(this.checked)"><span>Sort rooms by activity instead of people</span></label>' +
+                '<label><input type="checkbox" name="linkify" onchange="ChatTopBar.setLinkifyDescriptions(this.checked)"><span>Linkify URLs in search results</span></label>' +
                 '<label><input type="checkbox" name="open" onchange="ChatTopBar.setOpenRoomsHere(this.checked)"><span>Open search result rooms in this tab</span></label>' +
                 '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
                 '<hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>' +
@@ -841,6 +849,7 @@ function MakeChatTopbar ($, tbData) {
             dialog.find('[name="switch"]').prop('checked', setShowSwitcher());
             dialog.find('[name="autosearch"]').prop('checked', setAutoSearch());
             dialog.find('[name="byactivity"]').prop('checked', setSearchByActivity());
+            dialog.find('[name="linkify"]').prop('checked', setLinkifyDescriptions());
             dialog.find('[name="open"]').prop('checked', setOpenRoomsHere());
             dialog.find('#ctb-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
@@ -916,6 +925,12 @@ function MakeChatTopbar ($, tbData) {
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
             $('body').append(
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
+                '<li class="ctb-version-item">1.12.3<li><ul>' +
+                '<li>Entire area of room search results is now clickable.' +
+                '<li>Option to linkify URLs in room search results (enabled by default).' +
+                '<li>Links in room search results are now underlined on hover, to make it clear what you\'re clicking on.' +
+                '<li><span>ChatTopBar.setLinkifyDescriptions</span> to change linkify option.' +
+                '<li>Add workaround for <a href="https://meta.stackexchange.com/q/297021/230261">chat highlighting style bug</a>.</ul>' +
                 '<li class="ctb-version-item">1.12.2<li><ul>' +
                 '<li>Fixed an issue introduced with Firefox support where topbar sometimes didn\'t load on Chrome.</ul>' +
                 '<li class="ctb-version-item">1.12<li><ul>' +
@@ -1218,6 +1233,15 @@ function MakeChatTopbar ($, tbData) {
 
     }
 
+    // Set whether or not to convert URLs in room descriptions in the room finder to
+    // clickable links. Default is true. Null or undefined loads the persistent setting.
+    // Saves setting persistently. Returns the value of the option.
+    function setLinkifyDescriptions (enabled) {
+
+        return loadOrStore('linkifyDescriptions', enabled, true);
+
+    }
+
     // Set whether or not the topbar loads in an iframe. Default is false. Null or
     // undefined loads the persistent setting. Saves setting persistently. Returns the
     // value of the option.
@@ -1298,6 +1322,20 @@ function MakeChatTopbar ($, tbData) {
     function log (msg, important) {
         if (important || !setQuiet())
             console.log(`Chat Top Bar: ${msg}`);
+    }
+
+    // Convert URLs to links. Source: https://stackoverflow.com/a/7123542, works well enough.
+    function linkify (str) {
+        // http://, https://, ftp://
+        var urlPattern = /\b(?:https?|ftp):\/\/[a-z0-9-+&@#\/%?=~_|!:,.;]*[a-z0-9-+&@#\/%=~_|]/gim;
+        // www. sans http:// or https://
+        var pseudoUrlPattern = /(^|[^\/])(www\.[\S]+(\b|$))/gim;
+        // Email addresses
+        var emailAddressPattern = /[\w.]+@[a-zA-Z_-]+?(?:\.[a-zA-Z]{2,6})+/gim;
+        return str
+            .replace(urlPattern, '<a href="$&">$&</a>')
+            .replace(pseudoUrlPattern, '$1<a href="http://$2">$2</a>')
+            .replace(emailAddressPattern, '<a href="mailto:$&">$&</a>');
     }
 
 }
