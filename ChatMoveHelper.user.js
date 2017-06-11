@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.01-dev3
+// @version      1.01-dev4
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -95,7 +95,7 @@ function MakeChatMoveTool ($, fakedb) {
 
         // Add a bunch of stuff to the move messages dialog.
         let controls = $('.message-controls');
-        let btnselect, btnclean;
+        let btnselect, btnclean, btnautohide;
 
         let table = $('<table class="mm-table"/>')
             .append($('<tr class="mm-label-message"><td><label><input type="radio" name="mm-opt-usermode" value="name"/>user name:</label></td><td><input id="mm-opt-username" type="text"/></tr>'))
@@ -122,9 +122,16 @@ function MakeChatMoveTool ($, fakedb) {
                     .append(document.createTextNode('\xa0'))
                     .append($('<input type="button" class="button" value="deselect" id="mm-button-deselect"/>').click(() => (deselect(), false)))
                     .append($('<span class="mm-flex-spacer"/>'))
-                    .append($('<input type="checkbox" id="mm-opt-autohide">'))
-                    .append($('<input type="button" class="button" id="mm-opt-hide" value="hide"/>'))))
+                    .append($('<input type="button" class="button" id="mm-opt-hide" value="hide"/>'))
+                    .append(btnautohide = $('<label><input type="checkbox" id="mm-opt-autohide">auto</label>'))))
             .appendTo(controls);
+
+        // Cram it in there.
+        btnautohide.css({
+            'position': 'absolute',
+            'bottom': 36,
+            'right': btnautohide.width() + 10
+        });
 
         // Set up helpful tooltips.
         $('label:has(input[name="mm-opt-usermode"][value="name"]), #mm-opt-username').attr('title', 'match messages by user name (exact, case-sensitive)');
@@ -134,8 +141,8 @@ function MakeChatMoveTool ($, fakedb) {
         btnselect.attr('title', 'select all messages matching the above filters');
         $('input[type="button"][value="deselect"]', controls).attr('title', 'deselect all selected messages');
         $('#mm-opt-highlight').parent().attr('title', 'color code auto-selected messages, dim unselected messages');
-        $('#mm-opt-hide').attr('title', 'hide currently unselected message; unhide then rehide to refresh');
-        $('#mm-opt-autohide').attr('title', 'select this to initially hide when \'clean\' is clicked');
+        $('#mm-opt-hide').parent().attr('title', 'hide currently unselected message; unhide then rehide to refresh');
+        btnautohide.attr('title', 'select this to initially hide when \'clean\' is clicked');
 
         // Move the header back before mom finds out.
         controls.prepend($('h2', controls));
