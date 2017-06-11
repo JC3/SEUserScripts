@@ -191,12 +191,12 @@ function MakeChatMoveTool ($, fakedb) {
 
         let messages;
         if (options.filter.usermode === 'name') {
-            messages = $('.user-container .username')
+            messages = $('#chat .user-container .username')
                 .filter(function () { return $(this).text().trim() === options.filter.username; })
                 .closest('.user-container')
                 .find('.message');
         } else if (options.filter.usermode === 'id') {
-            messages = $(`.user-container.user-${options.filter.userid} .message`);
+            messages = $(`#chat .user-container.user-${options.filter.userid} .message`);
         } else {
             console.log(`Chat Move Tool: Invalid filter.usermode "${options.filter.usermode}"?`);
             messages = $();
@@ -243,17 +243,20 @@ function MakeChatMoveTool ($, fakedb) {
                 if (wasSelected !== isSelected) {
                     let t = $(m.target);
                     t.closest('.user-container:not(:has(.selected))').addClass('mm-contains-none');
-                    t.closest('.user-container:has(.selected)').removeClass('mm-contains-none');
+                    t.closest('.user-container:has(.selected)').removeClass('mm-contains-none').removeClass('mm-hidden');
+                    // mm-hidden is also removed above as a convenience, it makes sense
+                    // if you're in hidden mode but press the 'select' button to reveal
+                    // newly selected messages.
                 }
             } else if (m.target.getAttribute('id') === 'main') {
                 let wasSelecting = (m.oldValue && m.oldValue.includes('select-mode')) ? true : false;
                 let isSelecting = m.target.classList.contains('select-mode');
                 if (wasSelecting !== isSelecting) {
                     if (isSelecting) {
-                        $('.user-container:not(:has(.selected))').addClass('mm-contains-none');
-                        $('.user-container:has(.selected)').removeClass('mm-contains-none');
+                        $('#chat .user-container:not(:has(.selected))').addClass('mm-contains-none');
+                        $('#chat .user-container:has(.selected)').removeClass('mm-contains-none');
                     } else {
-                        $('.user-container').removeClass('mm-contains-none');
+                        $('#chat .user-container').removeClass('mm-contains-none');
                         toggleHidden(false); // Well... might as well do this here, too.
                     }
                 }
@@ -275,8 +278,8 @@ function MakeChatMoveTool ($, fakedb) {
 
         if (hide) {
             $('#main').addClass('mm-hide-empty');
-            $('.user-container.mm-contains-none').addClass('mm-hidden');
-            $('.user-container:not(.mm-contains-none').removeClass('mm-hidden');
+            $('#chat .user-container.mm-contains-none').addClass('mm-hidden');
+            $('#chat .user-container:not(.mm-contains-none').removeClass('mm-hidden');
             $('#mm-opt-hide').attr('value', 'unhide');
             // Firefox does not scroll automatically.
             if (!window.chrome)
@@ -305,14 +308,22 @@ function MakeChatMoveTool ($, fakedb) {
     // Load options. Returns { filter, settings }.
     function loadOptions () {
 
+        let SMOKEY_ID = 0;
+        if (window.location.hostname === 'chat.meta.stackexchange.com')
+            SMOKEY_ID = 266345;
+        else if (window.location.hostname === 'chat.stackexchange.com')
+            SMOKEY_ID = 120914;
+        else if (window.location.hostname === 'chat.stackoverflow.com')
+            SMOKEY_ID = 3735529;
+
         return {
 
             // Saved filter is per-room.
             filter: $.extend({
                 commandPrefix: '!!/',
                 username: 'SmokeDetector',
-                userid: 266345,
-                usermode: 'id',
+                userid: SMOKEY_ID,
+                usermode: (SMOKEY_ID ? 'id' : 'name'),
                 commands: true,
                 replies: true
             }, load(`filter-${window.location.hostname}-${CHAT.CURRENT_ROOM_ID}`, {})),
