@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Delete Messages
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.01
+// @version      1.02
 // @description  Message delete button for room owners.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -37,7 +37,7 @@
         let timestamp = message.data('rodel-timestamp');
 
         // 2 minute time limit.
-        if (!timestamp || (Date.now() - timestamp > 2 * 60 * 60 * 1000))
+        if (!timestamp || (Date.now() - timestamp > 2 * 60 * 1000))
             return;
 
         // Don't add option if message already deleted.
