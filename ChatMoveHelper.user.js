@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.01-dev4
+// @version      1.02
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -68,7 +68,7 @@ function MakeChatMoveTool ($, fakedb) {
         $('<style type="text/css"/>').append(`
             .message-controls { width: 400px !important; background: white !important; left: auto !important; right: 5% !important; }
             .message-controls > div { display: flex; }
-            .message-controls input:not([type="button"]) { border: 1px solid #cbcbcb; }
+            .message-controls input:not([type="button"]) { border: 1px solid #cbcbcb; color: #3b4045; }
             .message-controls .button.disabled, .message-controls .button.disabled:hover { cursor: default !important; background: #aaa !important; }
             .mm-version { float: right; opacity: 0.8; font-size: 95%; }
             .mm-control-pane { flex-basis: 100%; }
