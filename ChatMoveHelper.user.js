@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.01-dev1
+// @version      1.01-dev2
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -67,14 +67,16 @@ function MakeChatMoveTool ($, fakedb) {
         // Way easier than typing .css() all over the place.
         $('<style type="text/css"/>').append(`
             .message-controls { width: 400px !important; background: white !important; left: auto !important; right: 5% !important; }
-            .message-controls > div { display: flex; align-items: flex-end; }
+            .message-controls > div { display: flex; }
             .message-controls input:not([type="button"]) { border: 1px solid #cbcbcb; }
+            .message-controls .button.disabled, .message-controls .button.disabled:hover { cursor: default !important; background: #aaa !important; }
             .mm-version { float: right; opacity: 0.8; font-size: 95%; }
             .mm-control-pane { flex-basis: 100%; }
             .mm-control-pane:first-child { border-right: 1px dotted #cfcfcf; padding-right: 1ex; }
             .mm-control-pane:last-child { padding-left: 1ex; }
             .mm-control-pane-buttons { display: flex; align-items: center; }
             .mm-control-pane-buttons label { display: inline-flex; align-items: center; flex-grow: 1 }
+            .mm-flex-spacer { flex-grow: 1; }
             .mm-table input[type="text"] { width: calc(100% - 2px); box-shadow: inset 0 1px 2px #eff0f1, 0 0 0 #FFF; }
             .mm-table input[type="radio"] { margin-left: 1px; }
             .mm-table input { margin-left: 0; }
@@ -112,13 +114,14 @@ function MakeChatMoveTool ($, fakedb) {
                     .append(document.createTextNode('\xa0'))
                     .append(btncancel)
                     .append($('<label><input type="checkbox" id="mm-opt-highlight"/>enhance</label>'))))
-            .append($('<div class="mm-control-pane"/>')
+            .append($('<div class="mm-control-pane" style="display:flex;flex-direction:column;"/>')
                 .append(table)
+                .append($('<div class="mm-flex-spacer"/>'))
                 .append($('<div class="mm-control-pane-buttons"/>')
                     .append(btnselect = $('<input type="button" class="button" value="select"/>').click(() => (select(), false)))
                     .append(document.createTextNode('\xa0'))
-                    .append($('<input type="button" class="button" value="deselect"/>').click(() => (deselect(), false)))
-                    .append($('<span style="flex-grow:1"/>'))
+                    .append($('<input type="button" class="button" value="deselect" id="mm-button-deselect"/>').click(() => (deselect(), false)))
+                    .append($('<span class="mm-flex-spacer"/>'))
                     .append($('<input type="button" class="button" id="mm-opt-hide" value="hide"/>'))))
             .appendTo(controls);
 
@@ -187,6 +190,33 @@ function MakeChatMoveTool ($, fakedb) {
 
     }
 
+    // Update the selection count displayed on the UI. There's a couple solutions
+    // here, including just doing this on a timer. For now I've gone with the most
+    // responsive, it doesn't seem to be causing performance issues, which is to
+    // just do it in the mutation observer when we enter selection mode, or when
+    // the selection changes (kind of defeats the purpose of my previous performance
+    // optimizations there but whatever).
+    function updateSelectedCount () {
+
+        if (document.getElementById('main').classList.contains('select-mode')) {
+            let count = document
+                .getElementById('chat')
+                .getElementsByClassName('selected')
+                .length;
+            if (count !== updateSelectedCount.previous) {
+                let button = $('#mm-button-deselect')
+                .val(count ? `deselect ${count}` : 'deselect')
+                .prop('disabled', !count);
+                if (count)
+                    button.removeClass('disabled');
+                else
+                    button.addClass('disabled');
+                updateSelectedCount.previous = count;
+            }
+        }
+
+    }
+
     // Select all messages that match the current filter.
     function select () {
 
@@ -250,6 +280,7 @@ function MakeChatMoveTool ($, fakedb) {
                     // mm-hidden is also removed above as a convenience, it makes sense
                     // if you're in hidden mode but press the 'select' button to reveal
                     // newly selected messages.
+                    updateSelectedCount(); // <-- Ugh performance, whatever.
                 }
             } else if (m.target.getAttribute('id') === 'main') {
                 let wasSelecting = (m.oldValue && m.oldValue.includes('select-mode')) ? true : false;
@@ -258,6 +289,7 @@ function MakeChatMoveTool ($, fakedb) {
                     if (isSelecting) {
                         $('#chat .user-container:not(:has(.selected))').addClass('mm-contains-none');
                         $('#chat .user-container:has(.selected)').removeClass('mm-contains-none');
+                        updateSelectedCount(); // To update when dialog opened from room menu rather than 'clean'.
                     } else {
                         $('#chat .user-container').removeClass('mm-contains-none');
                         toggleHidden(false); // Well... might as well do this here, too.
