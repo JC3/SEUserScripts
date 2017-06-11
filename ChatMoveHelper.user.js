@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Move SmokeDetector Messages
+// @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      0.1
-// @description  Tool for moving SmokeDetector messges from the tavern.
+// @version      1.0-dev1
+// @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
 // @include      /^https?:\/\/chat\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -20,34 +20,25 @@
     if (!CHAT.RoomUsers.current().is_owner)
         return;
 
-    const FILTER_KEY = `${window.location.hostname}-${CHAT.CURRENT_ROOM_ID}-filter`;
+    var options = loadOptions();
 
-    let filter = $.extend({
-        commandPrefix: '!!/',
-        username: 'SmokeDetector',
-        userid: 266345,
-        usermode: 'id',
-        commands: true,
-        replies: true
-    }, load(FILTER_KEY, {}));
+    unsafeWindow.ChatMoveTool = {
+        dumpSettings: dump,
+        forgetSettings: reset,
+        setHighlight: setHighlight
+    };
 
-    let options = $.extend({
-        highlight: true
-    }, load('options', {}));
+    buildUI();
 
-    let ui = buildUI();
-
-    setHighlight(options.highlight);
-
-    // Create GUI. This adds stuff to move dialog and also a shortcut next to room menu.
     function buildUI () {
 
-        let gui = {};
-
+        // Way easier than typing .css() all over the place.
         $('<style type="text/css"/>').append(`
             .message-controls { width: 400px !important; }
             .message-controls > div { display: flex; align-items: flex-end; }
             .mm-control-pane { flex-basis: 100%; }
+            .mm-control-pane:first-child { border-right: 1px dotted #cfcfcf; padding-right: 1ex; }
+            .mm-control-pane:last-child { padding-left: 1ex; }
             .mm-control-pane-buttons { display: flex; align-items: center; }
             .mm-control-pane-buttons label { display: inline-flex; align-items: center; flex-grow: 1 }
             .mm-table input[type="text"] { width: 100%; }
@@ -55,16 +46,17 @@
             .mm-table input { margin-left: 0; }
             .mm-table td:first-child { padding-right: 1ex; }
             .mm-table td { white-space: nowrap; padding-top: 2px; vertical-align: middle; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="message"] { background: rgba(255,0,0,0.6) !important; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="command"] { background: rgba(255,80,0,0.6) !important; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="reply"] { background: rgba(255,160,0,0.6) !important; }
+            .message-admin-mode.select-mode.mm-highlight .message:not(.selected) { opacity: 0.25; }
+            .message-admin-mode.select-mode.mm-highlight .mm-contains-none .signature { opacity: 0.25; }
+            .message-admin-mode.select-mode.mm-highlight.mm-hide-empty .mm-contains-none .signature { opacity: 0.25; }
           `).appendTo('head');
 
-        gui.highlightStyles = $('<style type="text/css"/>').append(`
-            .mm-command { background: #f80 !important; }
-            .mm-smoke { background: #f00 !important; }
-            .mm-reply { background: #ff0 !important; }
-            .mm-none:not(.selected) { opacity: 0.25; }
-           `).appendTo('head');
-
+        // Add a bunch of stuff to the move messages dialog.
         let controls = $('.message-controls');
+        let btnselect, btnclean;
 
         let table = $('<table class="mm-table"/>')
             .append($('<tr><td><label><input type="radio" name="mm-opt-usermode" value="name"/>user name:</label></td><td><input id="mm-opt-username" type="text"/></tr>'))
@@ -75,208 +67,179 @@
 
         $('<div/>')
             .append($('<div class="mm-control-pane"/>')
-                .css({'border-right': '1px dotted #cfcfcf', 'padding-right': '1ex'})
-                .append(controls[0].childNodes)) // Snags header, too, we'll put it back later.
+                .append(controls[0].childNodes)) // Collateral damage: Snags header, too, we'll put it back later.
             .append($('<div class="mm-control-pane"/>')
-                .css({'padding-left': '1ex'})
                 .append(table)
                 .append($('<div class="mm-control-pane-buttons"/>')
-                    .append($('<input type="button" class="button" value="select"/>').click(()=>(selectSmoke(),false)))
+                    .append(btnselect = $('<input type="button" class="button" value="select"/>').click(() => (select(), false)))
                     .append(document.createTextNode('\xa0'))
-                    .append($('<input type="button" class="button" value="deselect"/>').click(()=>(deselectSmoke(),false)))
-                    .append($('<label><input type="checkbox" id="mm-opt-highlight"/>enhance</label>'))))
+                    .append($('<input type="button" class="button" value="deselect"/>').click(() => (deselect(), false)))
+                    .append($('<label><input type="checkbox" id="mm-opt-highlight" onchange="ChatMoveTool.setHighlight(this.checked)"/>enhance</label>'))))
             .appendTo(controls);
 
-        controls.prepend($('h2', controls)); // Move the header back.
+        // Move the header back before mom finds out.
+        controls.prepend($('h2', controls));
 
+        // This is our little sidebar shortcut....
         $('#sidebar-menu')
             .append(document.createTextNode(' | '))
-            .append($('<a href="#" title="auto select messages then open move dialog">clean</a>').click(()=>(openMove().then(selectSmoke),false)));
+            .append(btnclean = $('<a href="#" title="auto select messages then open move dialog">clean</a>'));
 
-        $('#mm-opt-highlight').click(function () {
-            setHighlight($(this).prop('checked'));
-        }).prop('checked', options.highlight);
-
-        $('#mm-opt-username').val(filter.username);
-        $('#mm-opt-userid').val(filter.userid);
-        $('#mm-opt-prefix').val(filter.commandPrefix);
-        $('#mm-opt-commands').prop('checked', filter.commands);
-        $('#mm-opt-replies').prop('checked', filter.replies);
-        $(`input[name="mm-opt-usermode"][value="${filter.usermode}"]`).click();
-
-        $('#sel-cancel').click(function () {
-            deselectSmoke();
-            return true;
+        // ... which shows the dialog *and* automatically selects.
+        btnclean.click(function () {
+            $('#main').addClass('message-admin-mode').addClass('select-mode');
+            btnselect.click();
+            return false;
         });
 
-        $('#adm-move').click(function () {
-            let tid = $(this).data('mm-timer-id');
-            if (!tid) {
-                tid = window.setInterval(function () {
-                    if ($('#main.select-mode, .message.selected').length === 0) {
-                        window.clearInterval(tid);
-                        $('#adm-move').data('mm-timer-id', null);
-                        deselectSmoke();
-                        console.log('derp');
-                    }
-                }, 250);
-                $('#adm-move').data('mm-timer-id', tid);
-            }
+        // Set initial values of UI elements.
+        $('#mm-opt-highlight').prop('checked', options.settings.highlight);
+        $('#mm-opt-username').val(options.filter.username);
+        $('#mm-opt-userid').val(options.filter.userid);
+        $('#mm-opt-prefix').val(options.filter.commandPrefix);
+        $('#mm-opt-commands').prop('checked', options.filter.commands);
+        $('#mm-opt-replies').prop('checked', options.filter.replies);
+        $(`input[name="mm-opt-usermode"][value="${options.filter.usermode}"]`).click();
+
+        // Any changes to filter elements just update and store local filter, easy. Note
+        // the highlight setting is taken care of directly in the HTML above.
+        $('.mm-table input').change(function () {
+            options.filter.username = $('#mm-opt-username').val().trim();
+            options.filter.userid = parseInt($('#mm-opt-userid').val()) || 0;
+            options.filter.commandPrefix = $('#mm-opt-prefix').val();
+            options.filter.commands = $('#mm-opt-commands').prop('checked');
+            options.filter.replies = $('#mm-opt-replies').prop('checked');
+            options.filter.usermode = $('input[name="mm-opt-usermode"]:checked').val();
+            storeOptions(options);
         });
 
-        return gui;
+        // Initialize mm-highlight class presence based on initial option value.
+        setHighlight(options.settings.highlight);
+
+        // Dim the signatures when "enhance" is selected. See comments.
+        setUpSignatureDimming();
 
     }
 
-    // Open the move dialog. Returns a deferred function.
-    function openMove () {
+    function select () {
 
-        // Easiest way is to click link in room menu, but room menu popup is created
-        // and destroyed on the fly, so we have to wait for it.
-        return $.Deferred(function (def) {
-            let m = $('.room-popup a:contains("move messages")');
-            if (m.length !== 0) {
-                // Popup is already loade so just open the dialog.
-                m.click();
-                def.resolve();
-            } else {
-                // Click room menu to start the popup loading.
-                if ($('.room-popup').length === 0)
-                    $('#room-menu').click();
-                // Now wait for the move messages link to appear and click it.
-                let i = window.setInterval(function () {
-                    let m = $('.room-popup a:contains("move messages")');
-                    if (m.length !== 0) {
-                        window.clearInterval(i);
-                        m.click();
-                        def.resolve();
-                    }
-                }, 50);
-            }
-        });
+        deselect();
 
-    }
+        let messages;
+        if (options.filter.usermode === 'name') {
+            messages = $('.user-container .username')
+                .filter(function () { return $(this).text().trim() === options.filter.username; })
+                .closest('.user-container')
+                .find('.message');
+        } else if (options.filter.usermode === 'id') {
+            messages = $(`.user-container.user-${options.filter.userid} .message`);
+        } else {
+            console.log(`Chat Move Tool: Invalid filter.usermode "${options.filter.usermode}"?`);
+            messages = $();
+        }
 
-    function selectSmoke () {
+        messages.attr('data-mm-type', 'message').addClass('selected');
 
-        deselectSmoke();
+        if (options.filter.replies) {
+            messages.each(function (_, message) {
+                let id = parseInt($(message).attr('id').replace(/[^0-9]+/g, ''));
+                $(`.message.pid-${id}`).attr('data-mm-type', 'reply').addClass('selected');
+            });
+        }
 
-        filter.username = $('#mm-opt-username').val().trim();
-        filter.userid = parseInt($('#mm-opt-userid').val());
-        filter.commandPrefix = $('#mm-opt-prefix').val();
-        filter.commands = $('#mm-opt-commands').prop('checked');
-        filter.replies = $('#mm-opt-replies').prop('checked');
-        filter.usermode = $('input[name="mm-opt-usermode"]:checked').val();
-        store(FILTER_KEY, filter);
-
-        let smoke = {};
-
-        $('.message').each(function (_, message) {
-            try {
-                let info = getMessageInfo($(message), filter);
-                if (info.type) {
-                    smoke[info.messageid] = info;
-                    if (filter.replies && info.type === 'smoke') {
-                        $(`.pid-${info.messageid}`).each(function (_, reply) {
-                            let rinfo = getMessageInfo($(reply));
-                            if (!smoke[rinfo.messageid])
-                                smoke[rinfo.messageid] = $.extend(rinfo, {type:'reply'});
-                        });
-                    }
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        });
-
-        for (let messageid in smoke) {
-            let info = smoke[messageid];
-            info.element
-                .addClass(`mm-${info.type}`)
-                .addClass('mm-selected')
+        if (options.filter.commands && options.filter.commandPrefix !== '') {
+            $('.message')
+                .filter(function () { return $(this).text().trim().startsWith(options.filter.commandPrefix); })
+                .attr('data-mm-type', 'command')
                 .addClass('selected');
         }
 
-        $('.message:not(.mm-selected)').addClass('mm-none');
-        $('.user-container:not(:has(.mm-selected)) .signature').addClass('mm-none');
+    }
+
+    function deselect () {
+
+        $('.message').removeAttr('data-mm-type');
+        $('.selected').removeClass('selected');
 
     }
 
-    function deselectSmoke () {
+    // I really want to dim the signatures when "enhance" is selected. It's a nice
+    // effect. But CSS doesn't have parent selectors and :has isn't supported, so
+    // sadly ".user-container:not(:has(.selected)) .signature" won't work in a style
+    // sheet, which would be perfect. So for now, as a workaround, monitor attribute
+    // changes and update opacity values manually. Meh. Shit load of work for such
+    // a tiny feature though...
+    function setUpSignatureDimming () {
 
-        $('.mm-selected')
-            .removeClass('selected')
-            .removeClass('mm-selected');
-
-        $('.message, .signature')
-            .removeClass('mm-command')
-            .removeClass('mm-smoke')
-            .removeClass('mm-reply')
-            .removeClass('mm-none');
+        new MutationObserver((ms) => ms.forEach(function (m) {
+            if (m.target.classList.contains('message')) {
+                let wasSelected = (m.oldValue && m.oldValue.includes('selected')) ? true : false;
+                let isSelected = m.target.classList.contains('selected');
+                if (wasSelected !== isSelected) {
+                    let t = $(m.target);
+                    t.closest('.user-container:not(:has(.selected))').addClass('mm-contains-none');
+                    t.closest('.user-container:has(.selected)').removeClass('mm-contains-none');
+                }
+            } else if (m.target.getAttribute('id') === 'main') {
+                let wasSelecting = (m.oldValue && m.oldValue.includes('select-mode')) ? true : false;
+                let isSelecting = m.target.classList.contains('select-mode');
+                if (wasSelecting !== isSelecting) {
+                    if (isSelecting) {
+                        $('.user-container:not(:has(.selected))').addClass('mm-contains-none');
+                        $('.user-container:has(.selected)').removeClass('mm-contains-none');
+                    } else {
+                        $('.user-container').removeClass('mm-contains-none');
+                    }
+                }
+            }
+        })).observe(document.getElementById('main'), {
+            attributes: true,
+            attributeOldValue: true,
+            attributeFilter: ['class'],
+            subtree: true
+        });
 
     }
 
-    // Get info about a message.
-    //   message: jQuery wrapper for a .message element.
-    //   filter: Optional filter descriptor.
-    // Returns {
-    //   element: The message element.
-    //   username: The user name.
-    //   userid: The user id.
-    //   messageid: The message id.
-    //   content: The message text.
-    //   type: If filter specified, see getMessageType(). Otherwise not present.
-    // }
-    function getMessageInfo (message, filter) {
+    function setHighlight (value) {
 
-        let container = message.closest('.user-container');
-        let info = {
-            element: message,
-            username: $('.username:first', container).text().trim(),
-            userid: parseInt($('a.signature', container).attr('href').replace(/[^0-9]+/g, '')),
-            messageid: parseInt(message.attr('id').replace(/[^0-9]+/g, '')),
-            content: $('.content', message).text().trim()
+        options.settings.highlight = value;
+        storeOptions(options);
+
+        if (value)
+            $('#main').addClass('mm-highlight');
+        else
+            $('#main').removeClass('mm-highlight');
+
+    }
+
+    function loadOptions () {
+
+        return {
+
+            // Saved filter is per-room.
+            filter: $.extend({
+                commandPrefix: '!!/',
+                username: 'SmokeDetector',
+                userid: 266345,
+                usermode: 'id',
+                commands: true,
+                replies: true
+            }, load(`filter-${window.location.hostname}-${CHAT.CURRENT_ROOM_ID}`, {})),
+
+            // Other settings are global.
+            settings: $.extend({
+                highlight: true
+            }, load('settings', {}))
+
         };
-        info.type = filter && getMessageType(info, filter);
-        return info;
 
     }
 
-    // Determine message type based on filter. 'info' is from getMessageInfo().
-    // 'filter' is the filter. Returns 'command', 'smoke', or ''. We don't determine
-    // if the type is 'reply' here, that's a later step since it requires context
-    // that is unavailable at this point.
-    function getMessageType (info, filter) {
+    function storeOptions (options) {
 
-        if ((filter.usermode === 'id' && info.userid === filter.userid) ||
-            (filter.usermode === 'name' && info.username === filter.username))
-            return 'smoke';
-        else if (filter.commands && info.content.startsWith(filter.commandPrefix))
-            return 'command';
-        else
-            return '';
-
-    }
-
-    function setHighlight (enable) {
-
-        if (enable)
-            ui.highlightStyles.appendTo('head');
-        else
-            ui.highlightStyles = ui.highlightStyles.detach();
-
-        options.highlight = enable;
-        store('options', options);
-
-    }
-
-    function store (key, obj) {
-
-        try {
-            GM_setValue(key, JSON.stringify(obj));
-        } catch (e) {
-            console.error(e);
-        }
+        store(`filter-${window.location.hostname}-${CHAT.CURRENT_ROOM_ID}`, options.filter || {});
+        store('settings', options.settings || {});
 
     }
 
@@ -292,18 +255,30 @@
 
     }
 
-    unsafeWindow.AutoMove = { };
+    function store (key, obj) {
 
-    unsafeWindow.AutoMove.dumpOptions = function () {
-        for (let key of GM_listValues().sort())
-            console.log(`${key} => ${GM_getValue(key)}`);
-    };
+        try {
+            GM_setValue(key, JSON.stringify(obj));
+        } catch (e) {
+            console.error(e);
+        }
 
-    unsafeWindow.AutoMove.resetOptions = function () {
+    }
+
+    function dump () {
+
         for (let key of GM_listValues())
-            GM_deleteValue(key);
-    };
+            console.log(`${key} => ${GM_getValue(key)}`);
 
-    unsafeWindow.AutoMove.currentFilter = () => filter;
+    }
+
+    function reset () {
+
+        for (let key of GM_listValues()) {
+            GM_deleteValue(key);
+            console.log(`Removed ${key}...`);
+        }
+
+    }
 
 })();
