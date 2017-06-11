@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.01-dev2
+// @version      1.01-dev3
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -122,6 +122,7 @@ function MakeChatMoveTool ($, fakedb) {
                     .append(document.createTextNode('\xa0'))
                     .append($('<input type="button" class="button" value="deselect" id="mm-button-deselect"/>').click(() => (deselect(), false)))
                     .append($('<span class="mm-flex-spacer"/>'))
+                    .append($('<input type="checkbox" id="mm-opt-autohide">'))
                     .append($('<input type="button" class="button" id="mm-opt-hide" value="hide"/>'))))
             .appendTo(controls);
 
@@ -134,6 +135,7 @@ function MakeChatMoveTool ($, fakedb) {
         $('input[type="button"][value="deselect"]', controls).attr('title', 'deselect all selected messages');
         $('#mm-opt-highlight').parent().attr('title', 'color code auto-selected messages, dim unselected messages');
         $('#mm-opt-hide').attr('title', 'hide currently unselected message; unhide then rehide to refresh');
+        $('#mm-opt-autohide').attr('title', 'select this to initially hide when \'clean\' is clicked');
 
         // Move the header back before mom finds out.
         controls.prepend($('h2', controls));
@@ -148,15 +150,20 @@ function MakeChatMoveTool ($, fakedb) {
             .append(document.createTextNode(' | '))
             .append(btnclean = $('<a href="#" title="auto select messages then open move dialog">clean</a>'));
 
-        // ... which shows the dialog *and* automatically selects.
+        // ... which shows the dialog *and* automatically selects (and maybe hides).
         btnclean.click(function () {
             $('#main').addClass('message-admin-mode').addClass('select-mode');
             btnselect.click();
+            // Hack alert; hiding requires the classes set by the DOM observer, but that takes
+            // a while to complete after btnselect.click() is called. Easy solution for now
+            // is to just wait a little bit. Increase this delay if needed.
+            window.setTimeout(function () { toggleHidden(options.settings.autohide); }, 250);
             return false;
         });
 
         // Set initial values of UI elements.
         $('#mm-opt-highlight').prop('checked', options.settings.highlight);
+        $('#mm-opt-autohide').prop('checked', options.settings.autohide);
         $('#mm-opt-username').val(options.filter.username);
         $('#mm-opt-userid').val(options.filter.userid);
         $('#mm-opt-prefix').val(options.filter.commandPrefix);
@@ -165,7 +172,7 @@ function MakeChatMoveTool ($, fakedb) {
         $(`input[name="mm-opt-usermode"][value="${options.filter.usermode}"]`).click();
 
         // Any changes to filter elements just update and store local filter, easy. Note
-        // the highlight setting is taken care of directly in the HTML above.
+        // the global settings are taken care of in the click handlers below.
         $('.mm-table input').change(function () {
             options.filter.username = $('#mm-opt-username').val().trim();
             options.filter.userid = parseInt($('#mm-opt-userid').val()) || 0;
@@ -178,6 +185,7 @@ function MakeChatMoveTool ($, fakedb) {
 
         // Other misc. callbacks.
         $('#mm-opt-highlight').click(function () { setHighlight($(this).prop('checked')); });
+        $('#mm-opt-autohide').click(function () { setAutoHide($(this).prop('checked')); });
         $('#mm-opt-hide').click(function () { toggleHidden(); });
         $('#mm-opt-username').keypress(function () { $('input[name="mm-opt-usermode"][value="name"]').click(); });
         $('#mm-opt-userid').keypress(function () { $('input[name="mm-opt-usermode"][value="id"]').click(); });
@@ -340,6 +348,14 @@ function MakeChatMoveTool ($, fakedb) {
 
     }
 
+    // Set auto hide mode (and save options).
+    function setAutoHide (value) {
+
+        options.settings.autohide = value;
+        storeOptions(options);
+
+    }
+
     // Load options. Returns { filter, settings }.
     function loadOptions () {
 
@@ -365,7 +381,8 @@ function MakeChatMoveTool ($, fakedb) {
 
             // Other settings are global.
             settings: $.extend({
-                highlight: true
+                highlight: true,
+                autohide: false
             }, load('settings', {}))
 
         };
@@ -411,7 +428,7 @@ function MakeChatMoveTool ($, fakedb) {
     function dump () {
 
         for (let key of Object.keys(fakedb.settings).sort())
-            console.log(`${key} => ${load(key)}`);
+            console.log(`${key} => ${JSON.stringify(load(key))}`);
 
     }
 
