@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.0-dev1
+// @version      1.0-dev2
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -24,8 +24,7 @@
 
     unsafeWindow.ChatMoveTool = {
         dumpSettings: dump,
-        forgetSettings: reset,
-        setHighlight: setHighlight
+        forgetSettings: reset
     };
 
     buildUI();
@@ -51,7 +50,8 @@
             .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="reply"] { background: rgba(255,160,0,0.6) !important; }
             .message-admin-mode.select-mode.mm-highlight .message:not(.selected) { opacity: 0.25; }
             .message-admin-mode.select-mode.mm-highlight .mm-contains-none .signature { opacity: 0.25; }
-            .message-admin-mode.select-mode.mm-highlight.mm-hide-empty .mm-contains-none .signature { opacity: 0.25; }
+            .message-admin-mode.select-mode.mm-hide-empty .mm-hidden { display: none; }
+            .message-admin-mode.select-mode.mm-hide-empty .system-message-container { display: none; }
           `).appendTo('head');
 
         // Add a bunch of stuff to the move messages dialog.
@@ -65,17 +65,35 @@
             .append($('<tr><td>cmd prefix:</td><td><input id="mm-opt-prefix" type="text"/></tr>'))
             .append($('<tr><td>replies?</td><td><input id="mm-opt-replies" type="checkbox"/></tr>'));
 
+        let btnmove = $('#adm-move');
+        let btncancel = $('#sel-cancel');
         $('<div/>')
             .append($('<div class="mm-control-pane"/>')
-                .append(controls[0].childNodes)) // Collateral damage: Snags header, too, we'll put it back later.
+                .append(controls[0].childNodes) // Collateral damage: Snags header, too, we'll put it back later.
+                .append($('<div class="mm-control-pane-buttons"/>')
+                    .append(btnmove)
+                    .append(document.createTextNode('\xa0'))
+                    .append(btncancel)
+                    .append($('<label><input type="checkbox" id="mm-opt-highlight"/>enhance</label>'))))
             .append($('<div class="mm-control-pane"/>')
                 .append(table)
                 .append($('<div class="mm-control-pane-buttons"/>')
                     .append(btnselect = $('<input type="button" class="button" value="select"/>').click(() => (select(), false)))
                     .append(document.createTextNode('\xa0'))
                     .append($('<input type="button" class="button" value="deselect"/>').click(() => (deselect(), false)))
-                    .append($('<label><input type="checkbox" id="mm-opt-highlight" onchange="ChatMoveTool.setHighlight(this.checked)"/>enhance</label>'))))
+                    .append($('<span style="flex-grow:1"/>'))
+                    .append($('<input type="button" class="button" id="mm-opt-hide" value="hide"/>'))))
             .appendTo(controls);
+
+        // Set up helpful tooltips.
+        $('label:has(input[name="mm-opt-usermode"][value="name"]), #mm-opt-username').attr('title', 'match messages by user name (exact, case-sensitive)');
+        $('label:has(input[name="mm-opt-usermode"][value="id"]), #mm-opt-userid').attr('title', 'match messages by user chat id');
+        $('#mm-opt-commands, #mm-opt-prefix').attr('title', 'match messages that start with the command prefix (case-sensitive)');
+        $('#mm-opt-replies').attr('title', 'match messages that are replies to the above user name/id');
+        btnselect.attr('title', 'select all messages matching the above filters');
+        $('input[type="button"][value="deselect"]', controls).attr('title', 'deselect all selected messages');
+        $('#mm-opt-highlight').parent().attr('title', 'color code auto-selected messages, dim unselected messages');
+        $('#mm-opt-hide').attr('title', 'hide currently unselected message; unhide then rehide to refresh');
 
         // Move the header back before mom finds out.
         controls.prepend($('h2', controls));
@@ -112,6 +130,12 @@
             options.filter.usermode = $('input[name="mm-opt-usermode"]:checked').val();
             storeOptions(options);
         });
+
+        // Other misc. callbacks.
+        $('#mm-opt-highlight').click(function () { setHighlight($(this).prop('checked')); });
+        $('#mm-opt-hide').click(function () { toggleHidden(); });
+        $('#mm-opt-username').keypress(function () { $('input[name="mm-opt-usermode"][value="name"]').click(); });
+        $('#mm-opt-userid').keypress(function () { $('input[name="mm-opt-usermode"][value="id"]').click(); });
 
         // Initialize mm-highlight class presence based on initial option value.
         setHighlight(options.settings.highlight);
@@ -189,6 +213,7 @@
                         $('.user-container:has(.selected)').removeClass('mm-contains-none');
                     } else {
                         $('.user-container').removeClass('mm-contains-none');
+                        toggleHidden(false); // Well... might as well do this here, too.
                     }
                 }
             }
@@ -198,6 +223,24 @@
             attributeFilter: ['class'],
             subtree: true
         });
+
+    }
+
+    function toggleHidden (hide) {
+
+        if (hide === undefined)
+            hide = !$('#main').hasClass('mm-hide-empty');
+
+        if (hide) {
+            $('#main').addClass('mm-hide-empty');
+            $('.user-container.mm-contains-none').addClass('mm-hidden');
+            $('.user-container:not(.mm-contains-none').removeClass('mm-hidden');
+            $('#mm-opt-hide').attr('value', 'unhide');
+        } else {
+            $('#main').removeClass('mm-hide-empty');
+            $('.mm-hidden').removeClass('mm-hidden');
+            $('#mm-opt-hide').attr('value', 'hide');
+        }
 
     }
 
