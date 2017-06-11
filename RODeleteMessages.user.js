@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Delete Messages
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.0
+// @version      1.01
 // @description  Message delete button for room owners.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -14,7 +14,8 @@
 (function() {
     'use strict';
 
-    if (!CHAT.RoomUsers.current().is_owner)
+    // Non-ROs can't use this. Mods already have delete.
+    if (!CHAT.RoomUsers.current().is_owner || CHAT.RoomUsers.current().is_moderator)
         return;
 
     new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach(function (a) {
