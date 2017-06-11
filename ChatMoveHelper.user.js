@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.0-dev3
+// @version      1.0-dev4
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -11,18 +11,48 @@
 // @grant        GM_getValue
 // @grant        GM_listValues
 // @grant        GM_deleteValue
-// @grant        unsafeWindow
+// @run-at       document-idle
 // ==/UserScript==
 
 (function() {
     'use strict';
+
+    // Firefox support: Store working copy of settings in tbData.
+    var fakedb = {settings: {}, scriptVersion: GM_info.script.version};
+    for (let key of GM_listValues())
+        fakedb.settings[key] = GM_getValue(key);
+
+    // Firefox support: Use events for settings instead of GM_* directly.
+    window.addEventListener('setvalue-8ec2f538-b698-4471-b38d-e8b61be84e87', function (ev) {
+        if (typeof ev.detail.key !== 'string' || typeof ev.detail.value !== 'string')
+            return;
+        GM_setValue(ev.detail.key, ev.detail.value);
+    });
+
+    // Firefox support: Use events for settings instead of GM_* directly.
+    window.addEventListener('deletevalue-8ec2f538-b698-4471-b38d-e8b61be84e87', function (ev) {
+        if (typeof ev.detail.key !== 'string')
+            return;
+        GM_deleteValue(ev.detail.key);
+    });
+
+    // Firefox support: Inject the script directly into the page. Note run-at document-idle
+    // is required to ensure CHAT and stuff is available.
+    (function (fn, db) {
+        let script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.textContent = `(${fn.toString()})(window.jQuery, ${JSON.stringify(db)})`;
+        document.body.appendChild(script);
+    })(MakeChatMoveTool, fakedb);
+    
+function MakeChatMoveTool ($, fakedb) {
 
     if (!CHAT.RoomUsers.current().is_owner)
         return;
 
     var options = loadOptions();
 
-    unsafeWindow.ChatMoveTool = {
+    window.ChatMoveTool = {
         dumpSettings: dump,
         forgetSettings: reset
     };
@@ -240,6 +270,9 @@
             $('.user-container.mm-contains-none').addClass('mm-hidden');
             $('.user-container:not(.mm-contains-none').removeClass('mm-hidden');
             $('#mm-opt-hide').attr('value', 'unhide');
+            // Firefox does not scroll automatically.
+            if (!window.chrome)
+                $(document).scrollTop($(document).height());
         } else {
             $('#main').removeClass('mm-hide-empty');
             $('.mm-hidden').removeClass('mm-hidden');
@@ -298,7 +331,8 @@
 
         var obj = null;
         try {
-            obj = JSON.parse(GM_getValue(key, null));
+            if (typeof fakedb.settings[key] !== 'undefined')
+                obj = JSON.parse(fakedb.settings[key]);
         } catch (e) {
             console.error(e);
         }
@@ -310,7 +344,9 @@
     function store (key, obj) {
 
         try {
-            GM_setValue(key, JSON.stringify(obj));
+            let val = JSON.stringify(obj);
+            fakedb.settings[key] = val;
+            window.dispatchEvent(new CustomEvent('setvalue-8ec2f538-b698-4471-b38d-e8b61be84e87', {detail: {key: key, value: val}}));
         } catch (e) {
             console.error(e);
         }
@@ -320,19 +356,22 @@
     // Print all stored settings to console.
     function dump () {
 
-        for (let key of GM_listValues())
-            console.log(`${key} => ${GM_getValue(key)}`);
+        for (let key of Object.keys(fakedb.settings).sort())
+            console.log(`${key} => ${load(key)}`);
 
     }
 
     // Erase all stored settings.
     function reset () {
 
-        for (let key of GM_listValues()) {
-            GM_deleteValue(key);
+        for (let key of Object.keys(fakedb.settings)) {
+            window.dispatchEvent(new CustomEvent('deletevalue-8ec2f538-b698-4471-b38d-e8b61be84e87', {detail: {key: key}}));
+            delete fakedb.settings[key];
             console.log(`Removed ${key}...`);
         }
 
     }
+
+}
 
 })();
