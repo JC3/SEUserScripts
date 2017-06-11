@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.00
+// @version      1.01-dev1
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -17,7 +17,7 @@
 (function() {
     'use strict';
 
-    // Firefox support: Store working copy of settings in tbData.
+    // Firefox support: Store working copy of settings in fakedb.
     var fakedb = {settings: {}, scriptVersion: GM_info.script.version};
     for (let key of GM_listValues())
         fakedb.settings[key] = GM_getValue(key);
@@ -66,22 +66,25 @@ function MakeChatMoveTool ($, fakedb) {
 
         // Way easier than typing .css() all over the place.
         $('<style type="text/css"/>').append(`
-            .message-controls { width: 400px !important; background: white !important; }
+            .message-controls { width: 400px !important; background: white !important; left: auto !important; right: 5% !important; }
             .message-controls > div { display: flex; align-items: flex-end; }
+            .message-controls input:not([type="button"]) { border: 1px solid #cbcbcb; }
             .mm-version { float: right; opacity: 0.8; font-size: 95%; }
             .mm-control-pane { flex-basis: 100%; }
             .mm-control-pane:first-child { border-right: 1px dotted #cfcfcf; padding-right: 1ex; }
             .mm-control-pane:last-child { padding-left: 1ex; }
             .mm-control-pane-buttons { display: flex; align-items: center; }
             .mm-control-pane-buttons label { display: inline-flex; align-items: center; flex-grow: 1 }
-            .mm-table input[type="text"] { width: 100%; }
-            .mm-table label { display: flex; align-items: center; }
+            .mm-table input[type="text"] { width: calc(100% - 2px); box-shadow: inset 0 1px 2px #eff0f1, 0 0 0 #FFF; }
+            .mm-table input[type="radio"] { margin-left: 1px; }
             .mm-table input { margin-left: 0; }
+            .mm-table label { display: flex; align-items: center; }
             .mm-table td:first-child { padding-right: 1ex; }
-            .mm-table td { white-space: nowrap; padding-top: 2px; vertical-align: middle; }
-            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="message"] { background: rgba(255,0,0,0.4) !important; }
-            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="command"] { background: rgba(255,80,0,0.4) !important; }
-            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="reply"] { background: rgba(255,160,0,0.4) !important; }
+            .mm-table td { white-space: nowrap; vertical-align: middle; }
+            .mm-table tr:not(:first-child) td { padding-top: 2px; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="message"], .mm-highlight .mm-label-message { background: rgba(255,0,0,0.4) !important; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="command"], .mm-highlight .mm-label-command { background: rgba(255,80,0,0.4) !important; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="reply"], .mm-highlight .mm-label-reply { background: rgba(255,160,0,0.4) !important; }
             .message-admin-mode.select-mode.mm-highlight .message:not(.selected) { opacity: 0.25; }
             .message-admin-mode.select-mode.mm-highlight .mm-contains-none .signature { opacity: 0.25; }
             .message-admin-mode.select-mode.mm-hide-empty .mm-hidden { display: none; }
@@ -93,11 +96,11 @@ function MakeChatMoveTool ($, fakedb) {
         let btnselect, btnclean;
 
         let table = $('<table class="mm-table"/>')
-            .append($('<tr><td><label><input type="radio" name="mm-opt-usermode" value="name"/>user name:</label></td><td><input id="mm-opt-username" type="text"/></tr>'))
-            .append($('<tr><td><label><input type="radio" name="mm-opt-usermode" value="id"/>user id:</label></td><td><input id="mm-opt-userid" type="text"/></tr>'))
-            .append($('<tr><td>commands?</td><td><input id="mm-opt-commands" type="checkbox"/></tr>'))
-            .append($('<tr><td>cmd prefix:</td><td><input id="mm-opt-prefix" type="text"/></tr>'))
-            .append($('<tr><td>replies?</td><td><input id="mm-opt-replies" type="checkbox"/></tr>'));
+            .append($('<tr class="mm-label-message"><td><label><input type="radio" name="mm-opt-usermode" value="name"/>user name:</label></td><td><input id="mm-opt-username" type="text"/></tr>'))
+            .append($('<tr class="mm-label-message"><td><label><input type="radio" name="mm-opt-usermode" value="id"/>user id:</label></td><td><input id="mm-opt-userid" type="text"/></tr>'))
+            .append($('<tr class="mm-label-command"><td>commands?</td><td><input id="mm-opt-commands" type="checkbox"/></tr>'))
+            .append($('<tr class="mm-label-command"><td>cmd prefix:</td><td><input id="mm-opt-prefix" type="text"/></tr>'))
+            .append($('<tr class="mm-label-reply"><td>replies?</td><td><input id="mm-opt-replies" type="checkbox"/></tr>'));
 
         let btnmove = $('#adm-move');
         let btncancel = $('#sel-cancel');
