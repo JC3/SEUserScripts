@@ -50,7 +50,7 @@ function MakeChatMoveTool ($, fakedb) {
     if (!CHAT.RoomUsers.current().is_owner)
         return;
 
-    const UPDATE_URL = 'https://stackapps.com';
+    const UPDATE_URL = 'https://stackapps.com/q/7439/25350';
 
     var options = loadOptions();
 
