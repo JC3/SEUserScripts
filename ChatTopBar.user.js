@@ -14,6 +14,7 @@
 // @grant        GM_setValue
 // @grant        GM_listValues
 // @grant        GM_deleteValue
+// @run-at       document-idle
 // ==/UserScript==
 
 (function() {
@@ -25,14 +26,14 @@
         tbData.settings[key] = GM_getValue(key);
 
     // Firefox support: Use events for settings instead of GM_* directly.
-    window.addEventListener('tb-setvalue', function (ev) {
+    window.addEventListener('setvalue-9d2798e5-6d48-488c-924e-899a39b74954', function (ev) {
         if (typeof ev.detail.key !== 'string' || typeof ev.detail.value !== 'string')
             return;
         GM_setValue(ev.detail.key, ev.detail.value);
     });
 
     // Firefox support: Use events for settings instead of GM_* directly.
-    window.addEventListener('tb-deletevalue', function (ev) {
+    window.addEventListener('deletevalue-9d2798e5-6d48-488c-924e-899a39b74954', function (ev) {
         if (typeof ev.detail.key !== 'string')
             return;
         GM_deleteValue(ev.detail.key);
@@ -41,11 +42,13 @@
     // Firefox support: Make this easier to debug in FF. Instead of letting GM/Tampermonkey
     // run the script, inject it into the page and run it from there.
     (function (f, data) {
-        var script = document.createElement('script');
+        let funcstr = f.toString();
+        let datastr = JSON.stringify(data);
+        let nsstr = encodeURI(GM_info.script.namespace.replace(/\/?$/, '/'));
+        let namestr = encodeURIComponent(GM_info.script.name);
+        let script = document.createElement('script');
         script.type = 'text/javascript';
-        script.textContent = '('  + f.toString() + ')(window.jQuery, ' + JSON.stringify(data) + ')' +
-            '\n\n//# sourceURL=' + encodeURI(GM_info.script.namespace.replace(/\/?$/, '/')) +
-            encodeURIComponent(GM_info.script.name);
+        script.textContent = `(${funcstr})(window.jQuery, ${datastr})\n\n//# sourceURL=${nsstr}${namestr}`;
         document.body.appendChild(script);
     })(MakeChatTopbar, tbData);
 
@@ -1290,7 +1293,7 @@ function MakeChatTopbar ($, tbData) {
     // Reset one setting.
     function forgetSetting (key) {
         delete tbData.settings[key];
-        window.dispatchEvent(new CustomEvent('tb-deletevalue', {detail: {key: key}}));
+        window.dispatchEvent(new CustomEvent('deletevalue-9d2798e5-6d48-488c-924e-899a39b74954', {detail: {key: key}}));
     }
 
     // Helper for GM_setValue.
@@ -1298,7 +1301,7 @@ function MakeChatTopbar ($, tbData) {
         // Only strings allowed.
         value = String(value);
         tbData.settings[key] = value;
-        window.dispatchEvent(new CustomEvent('tb-setvalue', {detail: {key: key, value: value}}));
+        window.dispatchEvent(new CustomEvent('setvalue-9d2798e5-6d48-488c-924e-899a39b74954', {detail: {key: key, value: value}}));
     }
 
     // Helper for GM_getValue.
