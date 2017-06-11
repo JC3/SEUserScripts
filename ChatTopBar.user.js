@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.12-dev2
+// @version      1.13
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -14,6 +14,7 @@
 // @grant        GM_setValue
 // @grant        GM_listValues
 // @grant        GM_deleteValue
+// @run-at       document-idle
 // ==/UserScript==
 
 (function() {
@@ -25,31 +26,31 @@
         tbData.settings[key] = GM_getValue(key);
 
     // Firefox support: Use events for settings instead of GM_* directly.
-    window.addEventListener('tb-setvalue', function (ev) {
+    window.addEventListener('setvalue-9d2798e5-6d48-488c-924e-899a39b74954', function (ev) {
         if (typeof ev.detail.key !== 'string' || typeof ev.detail.value !== 'string')
             return;
         GM_setValue(ev.detail.key, ev.detail.value);
     });
 
     // Firefox support: Use events for settings instead of GM_* directly.
-    window.addEventListener('tb-deletevalue', function (ev) {
+    window.addEventListener('deletevalue-9d2798e5-6d48-488c-924e-899a39b74954', function (ev) {
         if (typeof ev.detail.key !== 'string')
             return;
         GM_deleteValue(ev.detail.key);
     });
 
-    // Firefox support: Make this easier to debug in FF.
-    function with_jquery (f, data) {
-        var script = document.createElement('script');
+    // Firefox support: Make this easier to debug in FF. Instead of letting GM/Tampermonkey
+    // run the script, inject it into the page and run it from there.
+    (function (f, data) {
+        let funcstr = f.toString();
+        let datastr = JSON.stringify(data);
+        let nsstr = encodeURI(GM_info.script.namespace.replace(/\/?$/, '/'));
+        let namestr = encodeURIComponent(GM_info.script.name);
+        let script = document.createElement('script');
         script.type = 'text/javascript';
-        script.textContent = '('  + f.toString() + ')(window.jQuery, ' + JSON.stringify(data) + ')' +
-            '\n\n//# sourceURL=' + encodeURI(GM_info.script.namespace.replace(/\/?$/, '/')) +
-            encodeURIComponent(GM_info.script.name);
+        script.textContent = `(${funcstr})(window.jQuery, ${datastr})\n\n//# sourceURL=${nsstr}${namestr}`;
         document.body.appendChild(script);
-    }
-
-    // Firefox support: Run on load event instead of directly.
-    window.addEventListener('load', () => with_jquery(MakeChatTopbar, tbData));
+    })(MakeChatTopbar, tbData);
 
     // From here on out, this is executed in the unprivileged context of the page itself.
 function MakeChatTopbar ($, tbData) {
@@ -85,6 +86,12 @@ function MakeChatTopbar ($, tbData) {
     const AUTO_SEARCH_DELAY_MS = 500;
     const URL_UPDATES = 'https://stackapps.com/q/7404/25350';
     const URL_MORE = 'https://stackapps.com/search?tab=active&q=user%3a25350%20is%3aq%20%5bscript%5d%20';
+
+    // Add a couple useful jQuery functions that we'll use below.
+    $.fn.extend({
+        ctb_noclick: function () { return this.removeAttr('href').off('click').click(() => false); },
+        ctb_linkify: function (no) { return no ? this : this.html(linkify(this.html())); }
+    });
 
     // The main chat server page has a topbar and is on the same domain, load it up
     // in an invisible iframe.
@@ -141,6 +148,9 @@ function MakeChatTopbar ($, tbData) {
         setOpenRoomsHere: setOpenRoomsHere,
         setAutoSearch: setAutoSearch,
         setSearchByActivity: setSearchByActivity,
+        setLinkifyDescriptions: setLinkifyDescriptions,
+        setFaviconVisible: setFaviconVisible,
+        setFaviconStyle: setFaviconStyle,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
@@ -222,8 +232,8 @@ function MakeChatTopbar ($, tbData) {
             setWiden();
             setThemed();
             setBrightness();
-            // setShowSwitcher() is initialized in watchSEDropdown().
-            // setRejoinOnSwitch() is initialized in watchSEDropdown().
+            setFaviconVisible();
+            setFaviconStyle();
 
             // Put settings link at bottom; we're doing this in here so that we don't make the
             // dialog available to the user before styles are loaded. Probably being paranoid.
@@ -373,6 +383,9 @@ function MakeChatTopbar ($, tbData) {
 
         // Also fix any reply-info's that may have existed before we started observing.
         $('.reply-info').off('click').click(function () { return handleReplyScroll(this, correction); });
+
+        // Temporary workaround for https://meta.stackexchange.com/q/297021.
+        $('<style type="text/css">.message.highlight{margin-right:0 !important;}</style>').appendTo('head');
 
     }
 
@@ -527,7 +540,7 @@ function MakeChatTopbar ($, tbData) {
                 'font-size': '11px'
             }))
             .appendTo(search);
-        $('<div class="mc-result-container" id="mc-result-more"\>')
+        $('<a href="#" class="mc-result-container" id="mc-result-more"\>')
             .text('No results.')
             .appendTo(roomlist);
         $('#mc-roomfinder-tab') // Note: 'site' is not currently useful, requires a host and I have no UI for it.
@@ -547,19 +560,28 @@ function MakeChatTopbar ($, tbData) {
         blockOverscrollEvents(roomlist);
 
         // I'm sick of typing .css() everywhere. Style the search results in a stylesheet.
-        $('<style type="text/css"/>').text(
-            '.mc-result-container { padding: 10px; border-top: 1px solid #eff0f1; line-height: 1.3; }\n' +
-            '.mc-result-container:hover { background: #f7f8f8; }\n' +
-            '.mc-result-link { }\n' +
-            '.mc-result-title { margin-bottom: 4px; }\n' +
-            '.mc-result-description { margin-bottom: 4px; color: #2f3337; }\n' +
-            '.mc-result-info { color: #848d95; }\n' +
-            '.mc-result-users { }\n' +
-            '.mc-result-activity { float: right; }\n' +
-            '#mc-result-more { color: #999; }\n' +
-            '.mc-result-more-link { font-weight: bold; color: #0077cc !important; }\n' +
-            '#mc-roomfinder-tab { border: 1px solid #cbcbcb; box-shadow: inset 0 1px 2px #eff0f1,0 0 0 #FFF; color: #2f3337; }\n')
-            .prependTo(dropdown);
+        // Note: We're cheating a little and styling select elements in the settings dialog
+        // here, too. Should probably reorganize the stylesheets if this gets complicated.
+        $('<style type="text/css"/>').text(`
+            .mc-result-container { padding: 10px; border-top: 1px solid #eff0f1; line-height: 1.3; display:block; }
+            .mc-result-container[href]:hover { background: #f7f8f8; }
+            .mc-result-container a:hover { text-decoration: underline; }
+            .mc-result-title { margin-bottom: 4px; }
+            .mc-result-title img { display: none; position: relative; top: -1px; }
+            .mc-result-description { margin-bottom: 4px; color: #2f3337; }
+            .mc-result-info { color: #848d95; }
+            .mc-favicon-visible .mc-result-title img { display: block; float: right; }
+            .mc-favicon-visible[data-mc-favicon-style="left"] .mc-result-title img { float: left !important; margin-right: 1ex; }
+            .mc-favicon-visible[data-mc-favicon-style="margin"] .mc-result-title img { float: left !important; margin-right: 1ex; }
+            .mc-favicon-visible[data-mc-favicon-style="margin"] .mc-result-description { margin-left: calc(16px + 1ex); }
+            .mc-favicon-visible[data-mc-favicon-style="margin"] .mc-result-info { margin-left: calc(16px + 1ex); }
+            .mc-result-users { }
+            .mc-result-activity { float: right; }
+            #mc-result-more { color: #999; }
+            .mc-result-more-link { font-weight: bold; color: #0077cc !important; }
+            #mc-roomfinder-tab, #ctb-settings-dialog select { border: 1px solid #cbcbcb; box-shadow: inset 0 1px 2px #eff0f1,0 0 0 #FFF; color: #2f3337; }
+            .ui-widget select { font-family: inherit; font-size: inherit; }
+           `).appendTo('head');
 
         // Site input does this but I don't really like it on the dropdown:
         // #mc-roomfinder-tab:hover { border-color: rgba(0,149,255,0.5); box-shadow: inset 0 1px 2px #e4e6e8,0 0 2px rgba(0,119,204,0.1); }
@@ -679,14 +701,14 @@ function MakeChatTopbar ($, tbData) {
         // New search vs. loading more results.
         if (more && res.data('mc-params')) {
             // Update status.
-            status.toggle(true).off('click').text('Loading More...');
+            status.toggle(true).ctb_noclick().text('Loading More...');
             // Next page, from data.
             params = res.data('mc-params');
             params.page = (params.page || 1) + 1;
             res.data('mc-params', params);
         } else {
             // Clear existing results and update status.
-            status.toggle(true).off('click').text('Loading...');
+            status.toggle(true).ctb_noclick().text('Loading...');
             res.find('.mc-result-card').remove();
             // First page, use filter from text box and store it.
             params = {
@@ -702,6 +724,7 @@ function MakeChatTopbar ($, tbData) {
 
         // Run search.
         log(`Running search: ${JSON.stringify(params)}`);
+        let nolinks = !setLinkifyDescriptions();
         $.post('/rooms', params).then(function (html) {
             let doc = $('<div/>').html(html);
             doc.find('.roomcard').each(function (_, roomcard) {
@@ -711,12 +734,13 @@ function MakeChatTopbar ($, tbData) {
                     description: roomcard.find('.room-description').html().trim(),
                     activity: roomcard.find('.last-activity').html().trim(),
                     users: Number(roomcard.find('.room-users').attr('title').replace(/[^0-9]/g, '')),
-                    id: Number(roomcard.attr('id').replace(/[^0-9]/g, ''))
+                    id: Number(roomcard.attr('id').replace(/[^0-9]/g, '')),
+                    icon: roomcard.find('.small-site-logo')
                 };
-                $('<div class="mc-result-container mc-result-card"\>')
-                    .append($(`<a href="//${window.location.hostname}/rooms/${result.id}" class="mc-result-link"/>`)
-                        .append($(`<div class="mc-result-title">${escape(result.name)}</div>`))
-                        .append($(`<div class="mc-result-description">${result.description}</div>`)))
+                $(`<a class="mc-result-container mc-result-card mc-result-link"\>`)
+                    .attr('href', `//${window.location.hostname}/rooms/${result.id}`)
+                    .append($('<div class="mc-result-title"/>').text(result.name).append(result.icon.removeClass("small-site-logo")))
+                    .append($('<div class="mc-result-description"/>').html(result.description).ctb_linkify(nolinks))
                     .append($(`<div class="mc-result-info"><span class="mc-result-users">${withs(result.users, 'user')}</span><span class="mc-result-activity">${result.activity}</span></div>`))
                     .appendTo(res);
             });
@@ -725,14 +749,16 @@ function MakeChatTopbar ($, tbData) {
                     .addClass('mc-result-more-link')
                     .toggle(true)
                     .text('Load More...')
+                    .off('click')
                     .click(() => (doRoomSearch(true), false))
+                    .attr('href', '#')
                     .appendTo(res);
             } else if (res.find('.mc-result-card').length === 0) {
                 status
                     .removeClass('mc-result-more-link')
                     .toggle(true)
                     .text(params.filter === '' ? 'No results.' : `No results for "${params.filter}".`)
-                    .off('click');
+                    .ctb_noclick();
             } else {
                 status.toggle(false);
             }
@@ -747,11 +773,6 @@ function MakeChatTopbar ($, tbData) {
                 sinput.focus();
         });
 
-    }
-
-    // Sloppily escape HTML.
-    function escape (str) {
-        return str.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;');
     }
 
     // Concatenate a number to a string then pluralize a string.
@@ -779,7 +800,11 @@ function MakeChatTopbar ($, tbData) {
                 '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
                 '<label><input type="checkbox" name="autosearch" onchange="ChatTopBar.setAutoSearch(this.checked)"><span>Search for rooms as you type</span></label>' +
                 '<label><input type="checkbox" name="byactivity" onchange="ChatTopBar.setSearchByActivity(this.checked)"><span>Sort rooms by activity instead of people</span></label>' +
+                '<label><input type="checkbox" name="linkify" onchange="ChatTopBar.setLinkifyDescriptions(this.checked)"><span>Linkify URLs in search results</span></label>' +
                 '<label><input type="checkbox" name="open" onchange="ChatTopBar.setOpenRoomsHere(this.checked)"><span>Open search result rooms in this tab</span></label>' +
+                '<span style="display:flex;align-items:center;">' +
+                '<label><input type="checkbox" name="favvis" onchange="ChatTopBar.setFaviconVisible(this.checked)"><span>Display site icons in results:</span></label>' +
+                '    &nbsp;<select name="favstyle" onchange="ChatTopBar.setFaviconStyle(this.value)"><option>margin<option>left<option>right</select></label></span>' +
                 '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
                 '<hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>' +
                 '<div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>' +
@@ -843,6 +868,9 @@ function MakeChatTopbar ($, tbData) {
             dialog.find('[name="switch"]').prop('checked', setShowSwitcher());
             dialog.find('[name="autosearch"]').prop('checked', setAutoSearch());
             dialog.find('[name="byactivity"]').prop('checked', setSearchByActivity());
+            dialog.find('[name="linkify"]').prop('checked', setLinkifyDescriptions());
+            dialog.find('[name="favvis"]').prop('checked', setFaviconVisible());
+            dialog.find('[name="favstyle"]').val(setFaviconStyle());
             dialog.find('[name="open"]').prop('checked', setOpenRoomsHere());
             dialog.find('#ctb-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
@@ -918,9 +946,23 @@ function MakeChatTopbar ($, tbData) {
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
             $('body').append(
                 `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
+                '<li class="ctb-version-item">1.13<li><ul>' +
+                '<li>Site icons are now displayed in room results. Three options for positioning are present in settings dialog (I could not decide).' +
+                '<li>The site icon <i>visibility</i> setting is per chat server. Seems reasonable given that MSE and SO rooms all have the same boring icons, while SE is very exciting.' +
+                '<li><span>ChatTopBar.setFaviconVisible</span> and <span>ChatTopBar.setFaviconStyle</span> to change icon settings.' +
+                '<li>Window event names made more unique to avoid future namespace collisions.</ul>' +
+                '<li class="ctb-version-item">1.12.3<li><ul>' +
+                '<li>Entire area of room search results is now clickable.' +
+                '<li>Option to linkify URLs in room search results (enabled by default).' +
+                '<li>Links in room search results are now underlined on hover, to make it clear what you\'re clicking on.' +
+                '<li><span>ChatTopBar.setLinkifyDescriptions</span> to change linkify option.' +
+                '<li>Add workaround for <a href="https://meta.stackexchange.com/q/297021/230261">chat highlighting style bug</a>.</ul>' +
+                '<li class="ctb-version-item">1.12.2<li><ul>' +
+                '<li>Fixed an issue introduced with Firefox support where topbar sometimes didn\'t load on Chrome.</ul>' +
                 '<li class="ctb-version-item">1.12<li><ul>' +
                 '<li>Integrated Shog9\'s awesome Firefox patch. Now works on Firefox!' +
-                '<li>Patch also lets it work on internal company chat rooms (which have an extra iframe).</ul>' +
+                '<li>Patch also lets it work on internal company chat rooms (which have an extra iframe).' +
+                '<li>Chat theme code updated to work on Firefox.</ul>' +
                 '<li class="ctb-version-item">1.11.3<li><ul>' +
                 '<li>Room dropdown button brightness fixed to match other buttons.' +
                 '<li>Also, theme brightness was being applied twice to that button.</ul>' +
@@ -1217,6 +1259,44 @@ function MakeChatTopbar ($, tbData) {
 
     }
 
+    // Set whether or not to convert URLs in room descriptions in the room finder to
+    // clickable links. Default is true. Null or undefined loads the persistent setting.
+    // Saves setting persistently. Returns the value of the option.
+    function setLinkifyDescriptions (enabled) {
+
+        return loadOrStore('linkifyDescriptions', enabled, true);
+
+    }
+
+    // Set whether or not favicons are visible in the room search list. Default is
+    // true. Null or undefined loads the persistent setting. Saves setting persistently.
+    // Returns the value of the setting.
+    function setFaviconVisible (visible) {
+
+        visible = loadOrStore(`faviconVisible-${window.location.hostname}`, visible, true);
+
+        if (visible)
+            $('.topbar').addClass('mc-favicon-visible');
+        else
+            $('.topbar').removeClass('mc-favicon-visible');
+
+        return visible;
+
+    }
+
+    // Set the favicon style in the room search list. Valid values are 'right', 'left',
+    // or 'margin'. Default is 'left'. Null or undefined loads the persistent
+    // setting. Saves setting persistently. Returns the value of the option.
+    function setFaviconStyle (style) {
+
+        style = loadOrStore('faviconStyle', style, 'left');
+
+        $('.topbar').attr('data-mc-favicon-style', style);
+
+        return style;
+
+    }
+
     // Set whether or not the topbar loads in an iframe. Default is false. Null or
     // undefined loads the persistent setting. Saves setting persistently. Returns the
     // value of the option.
@@ -1264,7 +1344,7 @@ function MakeChatTopbar ($, tbData) {
     // Reset one setting.
     function forgetSetting (key) {
         delete tbData.settings[key];
-        window.dispatchEvent(new CustomEvent('tb-deletevalue', {detail: {key: key}}));
+        window.dispatchEvent(new CustomEvent('deletevalue-9d2798e5-6d48-488c-924e-899a39b74954', {detail: {key: key}}));
     }
 
     // Helper for GM_setValue.
@@ -1272,7 +1352,7 @@ function MakeChatTopbar ($, tbData) {
         // Only strings allowed.
         value = String(value);
         tbData.settings[key] = value;
-        window.dispatchEvent(new CustomEvent('tb-setvalue', {detail: {key: key, value: value}}));
+        window.dispatchEvent(new CustomEvent('setvalue-9d2798e5-6d48-488c-924e-899a39b74954', {detail: {key: key, value: value}}));
     }
 
     // Helper for GM_getValue.
@@ -1297,6 +1377,20 @@ function MakeChatTopbar ($, tbData) {
     function log (msg, important) {
         if (important || !setQuiet())
             console.log(`Chat Top Bar: ${msg}`);
+    }
+
+    // Convert URLs to links. Source: https://stackoverflow.com/a/7123542, works well enough.
+    function linkify (str) {
+        // http://, https://, ftp://
+        var urlPattern = /\b(?:https?|ftp):\/\/[a-z0-9-+&@#\/%?=~_|!:,.;]*[a-z0-9-+&@#\/%=~_|]/gim;
+        // www. sans http:// or https://
+        var pseudoUrlPattern = /(^|[^\/])(www\.[\S]+(\b|$))/gim;
+        // Email addresses
+        var emailAddressPattern = /[\w.]+@[a-zA-Z_-]+?(?:\.[a-zA-Z]{2,6})+/gim;
+        return str
+            .replace(urlPattern, '<a href="$&">$&</a>')
+            .replace(pseudoUrlPattern, '$1<a href="http://$2">$2</a>')
+            .replace(emailAddressPattern, '<a href="mailto:$&">$&</a>');
     }
 
 }
