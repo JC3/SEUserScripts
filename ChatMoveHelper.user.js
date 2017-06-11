@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.0-dev2
+// @version      1.0-dev3
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -29,6 +29,7 @@
 
     buildUI();
 
+    // Set up all the UI stuff.
     function buildUI () {
 
         // Way easier than typing .css() all over the place.
@@ -145,6 +146,7 @@
 
     }
 
+    // Select all messages that match the current filter.
     function select () {
 
         deselect();
@@ -180,6 +182,7 @@
 
     }
 
+    // Deselect *all* selected messages.
     function deselect () {
 
         $('.message').removeAttr('data-mm-type');
@@ -226,6 +229,7 @@
 
     }
 
+    // Set or toggle message hiding mode. If hide (boolean) not specified, just toggle.
     function toggleHidden (hide) {
 
         if (hide === undefined)
@@ -244,6 +248,7 @@
 
     }
 
+    // Set highlight mode (and save options).
     function setHighlight (value) {
 
         options.settings.highlight = value;
@@ -256,6 +261,7 @@
 
     }
 
+    // Load options. Returns { filter, settings }.
     function loadOptions () {
 
         return {
@@ -279,6 +285,7 @@
 
     }
 
+    // Save options.
     function storeOptions (options) {
 
         store(`filter-${window.location.hostname}-${CHAT.CURRENT_ROOM_ID}`, options.filter || {});
@@ -286,6 +293,7 @@
 
     }
 
+    // Helper for GM_getValue with support for objects.
     function load (key, def) {
 
         var obj = null;
@@ -298,6 +306,7 @@
 
     }
 
+    // Helper for GM_setValue. Stores objects. Do not store primitive types.
     function store (key, obj) {
 
         try {
@@ -308,6 +317,7 @@
 
     }
 
+    // Print all stored settings to console.
     function dump () {
 
         for (let key of GM_listValues())
@@ -315,6 +325,7 @@
 
     }
 
+    // Erase all stored settings.
     function reset () {
 
         for (let key of GM_listValues()) {
