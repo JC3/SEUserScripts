@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.0-dev4
+// @version      1.0-dev5
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -44,11 +44,13 @@
         script.textContent = `(${fn.toString()})(window.jQuery, ${JSON.stringify(db)})`;
         document.body.appendChild(script);
     })(MakeChatMoveTool, fakedb);
-    
+
 function MakeChatMoveTool ($, fakedb) {
 
     if (!CHAT.RoomUsers.current().is_owner)
         return;
+
+    const UPDATE_URL = 'https://stackapps.com';
 
     var options = loadOptions();
 
@@ -64,8 +66,9 @@ function MakeChatMoveTool ($, fakedb) {
 
         // Way easier than typing .css() all over the place.
         $('<style type="text/css"/>').append(`
-            .message-controls { width: 400px !important; }
+            .message-controls { width: 400px !important; background: white !important; }
             .message-controls > div { display: flex; align-items: flex-end; }
+            .mm-version { float: right; opacity: 0.8; font-size: 95%; }
             .mm-control-pane { flex-basis: 100%; }
             .mm-control-pane:first-child { border-right: 1px dotted #cfcfcf; padding-right: 1ex; }
             .mm-control-pane:last-child { padding-left: 1ex; }
@@ -76,9 +79,9 @@ function MakeChatMoveTool ($, fakedb) {
             .mm-table input { margin-left: 0; }
             .mm-table td:first-child { padding-right: 1ex; }
             .mm-table td { white-space: nowrap; padding-top: 2px; vertical-align: middle; }
-            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="message"] { background: rgba(255,0,0,0.6) !important; }
-            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="command"] { background: rgba(255,80,0,0.6) !important; }
-            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="reply"] { background: rgba(255,160,0,0.6) !important; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="message"] { background: rgba(255,0,0,0.4) !important; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="command"] { background: rgba(255,80,0,0.4) !important; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="reply"] { background: rgba(255,160,0,0.4) !important; }
             .message-admin-mode.select-mode.mm-highlight .message:not(.selected) { opacity: 0.25; }
             .message-admin-mode.select-mode.mm-highlight .mm-contains-none .signature { opacity: 0.25; }
             .message-admin-mode.select-mode.mm-hide-empty .mm-hidden { display: none; }
@@ -128,6 +131,11 @@ function MakeChatMoveTool ($, fakedb) {
 
         // Move the header back before mom finds out.
         controls.prepend($('h2', controls));
+
+        // Version number.
+        $('<div class="mm-version"/>')
+            .append($('<a/>').attr('href', UPDATE_URL).text(`Chat Move Tool ${fakedb.scriptVersion}`))
+            .prependTo(controls);
 
         // This is our little sidebar shortcut....
         $('#sidebar-menu')
@@ -362,13 +370,16 @@ function MakeChatMoveTool ($, fakedb) {
     }
 
     // Erase all stored settings.
-    function reset () {
+    function reset (noreload) {
 
         for (let key of Object.keys(fakedb.settings)) {
             window.dispatchEvent(new CustomEvent('deletevalue-8ec2f538-b698-4471-b38d-e8b61be84e87', {detail: {key: key}}));
             delete fakedb.settings[key];
             console.log(`Removed ${key}...`);
         }
+
+        if (!noreload)
+            document.location.reload();
 
     }
 
