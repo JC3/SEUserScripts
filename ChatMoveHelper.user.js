@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.00
+// @version      1.02
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -17,7 +17,7 @@
 (function() {
     'use strict';
 
-    // Firefox support: Store working copy of settings in tbData.
+    // Firefox support: Store working copy of settings in fakedb.
     var fakedb = {settings: {}, scriptVersion: GM_info.script.version};
     for (let key of GM_listValues())
         fakedb.settings[key] = GM_getValue(key);
@@ -66,22 +66,27 @@ function MakeChatMoveTool ($, fakedb) {
 
         // Way easier than typing .css() all over the place.
         $('<style type="text/css"/>').append(`
-            .message-controls { width: 400px !important; background: white !important; }
-            .message-controls > div { display: flex; align-items: flex-end; }
+            .message-controls { width: 400px !important; background: white !important; left: auto !important; right: 5% !important; }
+            .message-controls > div { display: flex; }
+            .message-controls input:not([type="button"]) { border: 1px solid #cbcbcb; color: #3b4045; }
+            .message-controls .button.disabled, .message-controls .button.disabled:hover { cursor: default !important; background: #aaa !important; }
             .mm-version { float: right; opacity: 0.8; font-size: 95%; }
             .mm-control-pane { flex-basis: 100%; }
             .mm-control-pane:first-child { border-right: 1px dotted #cfcfcf; padding-right: 1ex; }
             .mm-control-pane:last-child { padding-left: 1ex; }
             .mm-control-pane-buttons { display: flex; align-items: center; }
             .mm-control-pane-buttons label { display: inline-flex; align-items: center; flex-grow: 1 }
-            .mm-table input[type="text"] { width: 100%; }
-            .mm-table label { display: flex; align-items: center; }
+            .mm-flex-spacer { flex-grow: 1; }
+            .mm-table input[type="text"] { width: calc(100% - 2px); box-shadow: inset 0 1px 2px #eff0f1, 0 0 0 #FFF; }
+            .mm-table input[type="radio"] { margin-left: 1px; }
             .mm-table input { margin-left: 0; }
+            .mm-table label { display: flex; align-items: center; }
             .mm-table td:first-child { padding-right: 1ex; }
-            .mm-table td { white-space: nowrap; padding-top: 2px; vertical-align: middle; }
-            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="message"] { background: rgba(255,0,0,0.4) !important; }
-            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="command"] { background: rgba(255,80,0,0.4) !important; }
-            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="reply"] { background: rgba(255,160,0,0.4) !important; }
+            .mm-table td { white-space: nowrap; vertical-align: middle; }
+            .mm-table tr:not(:first-child) td { padding-top: 2px; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="message"], .mm-highlight .mm-label-message { background: rgba(255,0,0,0.4) !important; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="command"], .mm-highlight .mm-label-command { background: rgba(255,80,0,0.4) !important; }
+            .message-admin-mode.select-mode.mm-highlight .selected[data-mm-type="reply"], .mm-highlight .mm-label-reply { background: rgba(255,160,0,0.4) !important; }
             .message-admin-mode.select-mode.mm-highlight .message:not(.selected) { opacity: 0.25; }
             .message-admin-mode.select-mode.mm-highlight .mm-contains-none .signature { opacity: 0.25; }
             .message-admin-mode.select-mode.mm-hide-empty .mm-hidden { display: none; }
@@ -90,14 +95,14 @@ function MakeChatMoveTool ($, fakedb) {
 
         // Add a bunch of stuff to the move messages dialog.
         let controls = $('.message-controls');
-        let btnselect, btnclean;
+        let btnselect, btnclean, btnautohide;
 
         let table = $('<table class="mm-table"/>')
-            .append($('<tr><td><label><input type="radio" name="mm-opt-usermode" value="name"/>user name:</label></td><td><input id="mm-opt-username" type="text"/></tr>'))
-            .append($('<tr><td><label><input type="radio" name="mm-opt-usermode" value="id"/>user id:</label></td><td><input id="mm-opt-userid" type="text"/></tr>'))
-            .append($('<tr><td>commands?</td><td><input id="mm-opt-commands" type="checkbox"/></tr>'))
-            .append($('<tr><td>cmd prefix:</td><td><input id="mm-opt-prefix" type="text"/></tr>'))
-            .append($('<tr><td>replies?</td><td><input id="mm-opt-replies" type="checkbox"/></tr>'));
+            .append($('<tr class="mm-label-message"><td><label><input type="radio" name="mm-opt-usermode" value="name"/>user name:</label></td><td><input id="mm-opt-username" type="text"/></tr>'))
+            .append($('<tr class="mm-label-message"><td><label><input type="radio" name="mm-opt-usermode" value="id"/>user id:</label></td><td><input id="mm-opt-userid" type="text"/></tr>'))
+            .append($('<tr class="mm-label-command"><td>commands?</td><td><input id="mm-opt-commands" type="checkbox"/></tr>'))
+            .append($('<tr class="mm-label-command"><td>cmd prefix:</td><td><input id="mm-opt-prefix" type="text"/></tr>'))
+            .append($('<tr class="mm-label-reply"><td>replies?</td><td><input id="mm-opt-replies" type="checkbox"/></tr>'));
 
         let btnmove = $('#adm-move');
         let btncancel = $('#sel-cancel');
@@ -109,15 +114,24 @@ function MakeChatMoveTool ($, fakedb) {
                     .append(document.createTextNode('\xa0'))
                     .append(btncancel)
                     .append($('<label><input type="checkbox" id="mm-opt-highlight"/>enhance</label>'))))
-            .append($('<div class="mm-control-pane"/>')
+            .append($('<div class="mm-control-pane" style="display:flex;flex-direction:column;"/>')
                 .append(table)
+                .append($('<div class="mm-flex-spacer"/>'))
                 .append($('<div class="mm-control-pane-buttons"/>')
                     .append(btnselect = $('<input type="button" class="button" value="select"/>').click(() => (select(), false)))
                     .append(document.createTextNode('\xa0'))
-                    .append($('<input type="button" class="button" value="deselect"/>').click(() => (deselect(), false)))
-                    .append($('<span style="flex-grow:1"/>'))
-                    .append($('<input type="button" class="button" id="mm-opt-hide" value="hide"/>'))))
+                    .append($('<input type="button" class="button" value="deselect" id="mm-button-deselect"/>').click(() => (deselect(), false)))
+                    .append($('<span class="mm-flex-spacer"/>'))
+                    .append($('<input type="button" class="button" id="mm-opt-hide" value="hide"/>'))
+                    .append(btnautohide = $('<label><input type="checkbox" id="mm-opt-autohide">auto</label>'))))
             .appendTo(controls);
+
+        // Cram it in there.
+        btnautohide.css({
+            'position': 'absolute',
+            'bottom': 36,
+            'right': btnautohide.width() + 10
+        });
 
         // Set up helpful tooltips.
         $('label:has(input[name="mm-opt-usermode"][value="name"]), #mm-opt-username').attr('title', 'match messages by user name (exact, case-sensitive)');
@@ -127,7 +141,8 @@ function MakeChatMoveTool ($, fakedb) {
         btnselect.attr('title', 'select all messages matching the above filters');
         $('input[type="button"][value="deselect"]', controls).attr('title', 'deselect all selected messages');
         $('#mm-opt-highlight').parent().attr('title', 'color code auto-selected messages, dim unselected messages');
-        $('#mm-opt-hide').attr('title', 'hide currently unselected message; unhide then rehide to refresh');
+        $('#mm-opt-hide').parent().attr('title', 'hide currently unselected message; unhide then rehide to refresh');
+        btnautohide.attr('title', 'select this to initially hide when \'clean\' is clicked');
 
         // Move the header back before mom finds out.
         controls.prepend($('h2', controls));
@@ -142,15 +157,20 @@ function MakeChatMoveTool ($, fakedb) {
             .append(document.createTextNode(' | '))
             .append(btnclean = $('<a href="#" title="auto select messages then open move dialog">clean</a>'));
 
-        // ... which shows the dialog *and* automatically selects.
+        // ... which shows the dialog *and* automatically selects (and maybe hides).
         btnclean.click(function () {
             $('#main').addClass('message-admin-mode').addClass('select-mode');
             btnselect.click();
+            // Hack alert; hiding requires the classes set by the DOM observer, but that takes
+            // a while to complete after btnselect.click() is called. Easy solution for now
+            // is to just wait a little bit. Increase this delay if needed.
+            window.setTimeout(function () { toggleHidden(options.settings.autohide); }, 250);
             return false;
         });
 
         // Set initial values of UI elements.
         $('#mm-opt-highlight').prop('checked', options.settings.highlight);
+        $('#mm-opt-autohide').prop('checked', options.settings.autohide);
         $('#mm-opt-username').val(options.filter.username);
         $('#mm-opt-userid').val(options.filter.userid);
         $('#mm-opt-prefix').val(options.filter.commandPrefix);
@@ -159,7 +179,7 @@ function MakeChatMoveTool ($, fakedb) {
         $(`input[name="mm-opt-usermode"][value="${options.filter.usermode}"]`).click();
 
         // Any changes to filter elements just update and store local filter, easy. Note
-        // the highlight setting is taken care of directly in the HTML above.
+        // the global settings are taken care of in the click handlers below.
         $('.mm-table input').change(function () {
             options.filter.username = $('#mm-opt-username').val().trim();
             options.filter.userid = parseInt($('#mm-opt-userid').val()) || 0;
@@ -172,6 +192,7 @@ function MakeChatMoveTool ($, fakedb) {
 
         // Other misc. callbacks.
         $('#mm-opt-highlight').click(function () { setHighlight($(this).prop('checked')); });
+        $('#mm-opt-autohide').click(function () { setAutoHide($(this).prop('checked')); });
         $('#mm-opt-hide').click(function () { toggleHidden(); });
         $('#mm-opt-username').keypress(function () { $('input[name="mm-opt-usermode"][value="name"]').click(); });
         $('#mm-opt-userid').keypress(function () { $('input[name="mm-opt-usermode"][value="id"]').click(); });
@@ -181,6 +202,33 @@ function MakeChatMoveTool ($, fakedb) {
 
         // Dim the signatures when "enhance" is selected. See comments.
         setUpSignatureDimming();
+
+    }
+
+    // Update the selection count displayed on the UI. There's a couple solutions
+    // here, including just doing this on a timer. For now I've gone with the most
+    // responsive, it doesn't seem to be causing performance issues, which is to
+    // just do it in the mutation observer when we enter selection mode, or when
+    // the selection changes (kind of defeats the purpose of my previous performance
+    // optimizations there but whatever).
+    function updateSelectedCount () {
+
+        if (document.getElementById('main').classList.contains('select-mode')) {
+            let count = document
+                .getElementById('chat')
+                .getElementsByClassName('selected')
+                .length;
+            if (count !== updateSelectedCount.previous) {
+                let button = $('#mm-button-deselect')
+                .val(count ? `deselect ${count}` : 'deselect')
+                .prop('disabled', !count);
+                if (count)
+                    button.removeClass('disabled');
+                else
+                    button.addClass('disabled');
+                updateSelectedCount.previous = count;
+            }
+        }
 
     }
 
@@ -247,6 +295,7 @@ function MakeChatMoveTool ($, fakedb) {
                     // mm-hidden is also removed above as a convenience, it makes sense
                     // if you're in hidden mode but press the 'select' button to reveal
                     // newly selected messages.
+                    updateSelectedCount(); // <-- Ugh performance, whatever.
                 }
             } else if (m.target.getAttribute('id') === 'main') {
                 let wasSelecting = (m.oldValue && m.oldValue.includes('select-mode')) ? true : false;
@@ -255,6 +304,7 @@ function MakeChatMoveTool ($, fakedb) {
                     if (isSelecting) {
                         $('#chat .user-container:not(:has(.selected))').addClass('mm-contains-none');
                         $('#chat .user-container:has(.selected)').removeClass('mm-contains-none');
+                        updateSelectedCount(); // To update when dialog opened from room menu rather than 'clean'.
                     } else {
                         $('#chat .user-container').removeClass('mm-contains-none');
                         toggleHidden(false); // Well... might as well do this here, too.
@@ -305,6 +355,14 @@ function MakeChatMoveTool ($, fakedb) {
 
     }
 
+    // Set auto hide mode (and save options).
+    function setAutoHide (value) {
+
+        options.settings.autohide = value;
+        storeOptions(options);
+
+    }
+
     // Load options. Returns { filter, settings }.
     function loadOptions () {
 
@@ -330,7 +388,8 @@ function MakeChatMoveTool ($, fakedb) {
 
             // Other settings are global.
             settings: $.extend({
-                highlight: true
+                highlight: true,
+                autohide: false
             }, load('settings', {}))
 
         };
@@ -376,7 +435,7 @@ function MakeChatMoveTool ($, fakedb) {
     function dump () {
 
         for (let key of Object.keys(fakedb.settings).sort())
-            console.log(`${key} => ${load(key)}`);
+            console.log(`${key} => ${JSON.stringify(load(key))}`);
 
     }
 
