@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.0-dev5
+// @version      1.00
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
