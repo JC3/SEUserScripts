@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.14-dev1
+// @version      1.14-dev2
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -152,6 +152,7 @@ function MakeChatTopbar ($, tbData) {
         setFaviconVisible: setFaviconVisible,
         setFaviconStyle: setFaviconStyle,
         setCompactResults: setCompactResults,
+        setAutoLoadMore: setAutoLoadMore,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
@@ -562,6 +563,13 @@ function MakeChatTopbar ($, tbData) {
         });
         blockOverscrollEvents(roomlist);
 
+        roomlist[0].onscroll = function (event) {
+            if (roomlist[0].scrollTop + roomlist[0].offsetHeight >= roomlist[0].scrollHeight - 2) {
+                if (setAutoLoadMore() && $('#mc-result-more').data('mc-auto-click'))
+                    $('#mc-result-more').data('mc-auto-click', false).click();
+            }
+        };
+
         // I'm sick of typing .css() everywhere. Style the search results in a stylesheet.
         // Note: We're cheating a little and styling select elements in the settings dialog
         // here, too. Should probably reorganize the stylesheets if this gets complicated.
@@ -569,12 +577,14 @@ function MakeChatTopbar ($, tbData) {
             .mc-result-container { padding: 10px; border-top: 1px solid #eff0f1; line-height: 1.3; display:block; }
             .mc-result-container[href]:hover { background: #f7f8f8; }
             .mc-result-container a:hover { text-decoration: underline; }
-            .mc-result-title { margin-bottom: 4px; }
+            .mc-result-title { margin-bottom: 4px; pointer-events: none; }
             .mc-result-title img { display: none; position: relative; top: -1px; }
             .mc-result-title .mc-result-users { float: right; }
             .mc-result-description { margin-bottom: 4px; color: #2f3337; }
             .mc-result-info, .mc-result-users, .mc-result-activity { color: #848d95; }
             .mc-result-compact-only { display: none; }
+            .mc-result-current .mc-result-title { font-weight: bold; }
+            .mc-result-current .mc-result-title > * { font-weight: normal; }
             .mc-favicon-visible .mc-result-title img { display: block; float: right; }
             .mc-favicon-visible[data-mc-favicon-style="left"] .mc-result-title img { float: left !important; margin-right: 1ex; }
             .mc-favicon-visible[data-mc-favicon-style="margin"] .mc-result-title img { float: left !important; margin-right: 1ex; }
@@ -583,7 +593,7 @@ function MakeChatTopbar ($, tbData) {
             .mc-favicon-visible[data-mc-favicon-style="right"].mc-compact-finder .mc-result-users { margin-right: 1ex; }
             .mc-favicon-visible[data-mc-favicon-style="right"].mc-compact-finder .mc-result-activity { margin-right: 1ex; }
             .mc-compact-finder .mc-result-container { padding: 5px 10px; }
-            .mc-compact-finder .mc-result-title { margin-bottom: inherit; }
+            .mc-compact-finder .mc-result-title { margin-bottom: inherit; pointer-events: auto; }
             .mc-compact-finder .mc-result-description { display: none; }
             .mc-compact-finder .mc-result-info { display: none; }
             .mc-compact-finder .mc-result-compact-only { display: initial; }
@@ -710,7 +720,7 @@ function MakeChatTopbar ($, tbData) {
         sinput.prop('disabled', !sinput.data('mc-auto'));
         sbutton.prop('disabled', true);
         stab.prop('disabled', true);
-        status.removeClass('mc-result-more-link');
+        status.removeClass('mc-result-more-link').data('mc-auto-click', false)
 
         // New search vs. loading more results.
         if (more && res.data('mc-params')) {
@@ -745,7 +755,7 @@ function MakeChatTopbar ($, tbData) {
                 roomcard = $(roomcard);
                 let result = {
                     name: roomcard.find('.room-name').text().trim(),
-                    description: roomcard.find('.room-description').html().trim(),
+                    description: roomcard.find('.room-description'),
                     activity: roomcard.find('.last-activity'),
                     users: Number(roomcard.find('.room-users').attr('title').replace(/[^0-9]/g, '')),
                     id: Number(roomcard.attr('id').replace(/[^0-9]/g, '')),
@@ -753,14 +763,15 @@ function MakeChatTopbar ($, tbData) {
                 };
                 let compactActivity = /^([\w\s]*)/.exec(result.activity.text());
                 compactActivity = (compactActivity ? compactActivity[1].trim() : '');
-                $(`<a class="mc-result-container mc-result-card mc-result-link"\>`)
+                $(`<a class="mc-result-container mc-result-card mc-result-link${result.id === CHAT.CURRENT_ROOM_ID ? ' mc-result-current' : ''}"\>`)
                     .attr('href', `//${window.location.hostname}/rooms/${result.id}`)
                     .append($('<div class="mc-result-title"/>')
+                         .attr('title', result.description.text().trim())
                          .text(result.name)
                          .append(result.icon.removeClass("small-site-logo"))
                          .append(`<span class="mc-result-users mc-result-compact-only">${withs(result.users, 'user')}</span>`)
                          .append(`<span class="mc-result-activity mc-result-compact-only">${compactActivity}</span>`))
-                    .append($('<div class="mc-result-description"/>').html(result.description).ctb_linkify(nolinks))
+                    .append($('<div class="mc-result-description"/>').html(result.description.html().trim()).ctb_linkify(nolinks))
                     .append($(`<div class="mc-result-info"><span class="mc-result-users">${withs(result.users, 'user')}</span><span class="mc-result-activity">${result.activity.html().trim()}</span></div>`))
                     .appendTo(res);
             });
@@ -772,6 +783,7 @@ function MakeChatTopbar ($, tbData) {
                     .off('click')
                     .click(() => (doRoomSearch(true), false))
                     .attr('href', '#')
+                    .data('mc-auto-click', true)
                     .appendTo(res);
             } else if (res.find('.mc-result-card').length === 0) {
                 status
@@ -1337,6 +1349,16 @@ function MakeChatTopbar ($, tbData) {
             $('.topbar').removeClass('mc-compact-finder');
 
         return compact;
+
+    }
+
+    // Set whether or not to automatically load more room search results when the user has
+    // scrolled to the bottom of the result list. Default is false. Null or undefined
+    // loads the persistent setting. Saves setting persistently. Returns the value of the
+    // option.
+    function setAutoLoadMore (auto) {
+
+        return loadOrStore('autoLoadResults', auto, false);
 
     }
 
