@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.13
+// @version      1.14-dev1
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -151,6 +151,7 @@ function MakeChatTopbar ($, tbData) {
         setLinkifyDescriptions: setLinkifyDescriptions,
         setFaviconVisible: setFaviconVisible,
         setFaviconStyle: setFaviconStyle,
+        setCompactResults: setCompactResults,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
@@ -234,6 +235,8 @@ function MakeChatTopbar ($, tbData) {
             setBrightness();
             setFaviconVisible();
             setFaviconStyle();
+            setCompactResults();
+            setSearchByActivity(); // Sets data-mc-result-sort for compact mode styling.
 
             // Put settings link at bottom; we're doing this in here so that we don't make the
             // dialog available to the user before styles are loaded. Probably being paranoid.
@@ -568,13 +571,24 @@ function MakeChatTopbar ($, tbData) {
             .mc-result-container a:hover { text-decoration: underline; }
             .mc-result-title { margin-bottom: 4px; }
             .mc-result-title img { display: none; position: relative; top: -1px; }
+            .mc-result-title .mc-result-users { float: right; }
             .mc-result-description { margin-bottom: 4px; color: #2f3337; }
-            .mc-result-info { color: #848d95; }
+            .mc-result-info, .mc-result-users, .mc-result-activity { color: #848d95; }
+            .mc-result-compact-only { display: none; }
             .mc-favicon-visible .mc-result-title img { display: block; float: right; }
             .mc-favicon-visible[data-mc-favicon-style="left"] .mc-result-title img { float: left !important; margin-right: 1ex; }
             .mc-favicon-visible[data-mc-favicon-style="margin"] .mc-result-title img { float: left !important; margin-right: 1ex; }
             .mc-favicon-visible[data-mc-favicon-style="margin"] .mc-result-description { margin-left: calc(16px + 1ex); }
             .mc-favicon-visible[data-mc-favicon-style="margin"] .mc-result-info { margin-left: calc(16px + 1ex); }
+            .mc-favicon-visible[data-mc-favicon-style="right"].mc-compact-finder .mc-result-users { margin-right: 1ex; }
+            .mc-favicon-visible[data-mc-favicon-style="right"].mc-compact-finder .mc-result-activity { margin-right: 1ex; }
+            .mc-compact-finder .mc-result-container { padding: 5px 10px; }
+            .mc-compact-finder .mc-result-title { margin-bottom: inherit; }
+            .mc-compact-finder .mc-result-description { display: none; }
+            .mc-compact-finder .mc-result-info { display: none; }
+            .mc-compact-finder .mc-result-compact-only { display: initial; }
+            .mc-compact-finder[data-mc-result-sort="users"] .mc-result-activity { display: none }
+            .mc-compact-finder[data-mc-result-sort="activity"] .mc-result-users { display: none }
             .mc-result-users { }
             .mc-result-activity { float: right; }
             #mc-result-more { color: #999; }
@@ -732,16 +746,22 @@ function MakeChatTopbar ($, tbData) {
                 let result = {
                     name: roomcard.find('.room-name').text().trim(),
                     description: roomcard.find('.room-description').html().trim(),
-                    activity: roomcard.find('.last-activity').html().trim(),
+                    activity: roomcard.find('.last-activity'),
                     users: Number(roomcard.find('.room-users').attr('title').replace(/[^0-9]/g, '')),
                     id: Number(roomcard.attr('id').replace(/[^0-9]/g, '')),
                     icon: roomcard.find('.small-site-logo')
                 };
+                let compactActivity = /^([\w\s]*)/.exec(result.activity.text());
+                compactActivity = (compactActivity ? compactActivity[1].trim() : '');
                 $(`<a class="mc-result-container mc-result-card mc-result-link"\>`)
                     .attr('href', `//${window.location.hostname}/rooms/${result.id}`)
-                    .append($('<div class="mc-result-title"/>').text(result.name).append(result.icon.removeClass("small-site-logo")))
+                    .append($('<div class="mc-result-title"/>')
+                         .text(result.name)
+                         .append(result.icon.removeClass("small-site-logo"))
+                         .append(`<span class="mc-result-users mc-result-compact-only">${withs(result.users, 'user')}</span>`)
+                         .append(`<span class="mc-result-activity mc-result-compact-only">${compactActivity}</span>`))
                     .append($('<div class="mc-result-description"/>').html(result.description).ctb_linkify(nolinks))
-                    .append($(`<div class="mc-result-info"><span class="mc-result-users">${withs(result.users, 'user')}</span><span class="mc-result-activity">${result.activity}</span></div>`))
+                    .append($(`<div class="mc-result-info"><span class="mc-result-users">${withs(result.users, 'user')}</span><span class="mc-result-activity">${result.activity.html().trim()}</span></div>`))
                     .appendTo(res);
             });
             if (doc.find('.pager a[rel="next"').length > 0) {
@@ -793,23 +813,24 @@ function MakeChatTopbar ($, tbData) {
         if ($('#ctb-settings-dialog').length === 0) {
             let title = (typeof tbData.scriptVersion === 'undefined' ? '' : ` (${tbData.scriptVersion})`);
             $('body').append(
-                `<div id="ctb-settings-dialog" title="Settings${title}">` +
-                '<label><input type="checkbox" name="themed" onchange="ChatTopBar.setThemed(this.checked)"><span>Use chat room themes</span></label>' +
-                '<label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>' +
-                '<label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>' +
-                '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
-                '<label><input type="checkbox" name="autosearch" onchange="ChatTopBar.setAutoSearch(this.checked)"><span>Search for rooms as you type</span></label>' +
-                '<label><input type="checkbox" name="byactivity" onchange="ChatTopBar.setSearchByActivity(this.checked)"><span>Sort rooms by activity instead of people</span></label>' +
-                '<label><input type="checkbox" name="linkify" onchange="ChatTopBar.setLinkifyDescriptions(this.checked)"><span>Linkify URLs in search results</span></label>' +
-                '<label><input type="checkbox" name="open" onchange="ChatTopBar.setOpenRoomsHere(this.checked)"><span>Open search result rooms in this tab</span></label>' +
-                '<span style="display:flex;align-items:center;">' +
-                '<label><input type="checkbox" name="favvis" onchange="ChatTopBar.setFaviconVisible(this.checked)"><span>Display site icons in results:</span></label>' +
-                '    &nbsp;<select name="favstyle" onchange="ChatTopBar.setFaviconStyle(this.value)"><option>margin<option>left<option>right</select></label></span>' +
-                '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
-                '<hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>' +
-                '<div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>' +
-                `<div class="ctb-fixheight" style="white-space:nowrap"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a>&nbsp;|&nbsp;<a href="#" id="ctb-show-log">Change Log</a></div>` +
-                '</div>');
+                `<div id="ctb-settings-dialog" title="Settings${title}">
+                 <label><input type="checkbox" name="themed" onchange="ChatTopBar.setThemed(this.checked)"><span>Use chat room themes</span></label>
+                 <label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>
+                 <label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>
+                 <label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>
+                 <label><input type="checkbox" name="autosearch" onchange="ChatTopBar.setAutoSearch(this.checked)"><span>Search for rooms as you type</span></label>
+                 <label><input type="checkbox" name="byactivity" onchange="ChatTopBar.setSearchByActivity(this.checked)"><span>Sort rooms by activity instead of people</span></label>
+                 <label><input type="checkbox" name="linkify" onchange="ChatTopBar.setLinkifyDescriptions(this.checked)"><span>Linkify URLs in search results</span></label>
+                 <label><input type="checkbox" name="open" onchange="ChatTopBar.setOpenRoomsHere(this.checked)"><span>Open search result rooms in this tab</span></label>
+                 <span style="display:flex;align-items:center;">
+                 <label><input type="checkbox" name="favvis" onchange="ChatTopBar.setFaviconVisible(this.checked)"><span>Display site icons in results:</span></label>
+                     &nbsp;<select name="favstyle" onchange="ChatTopBar.setFaviconStyle(this.value)"><option>margin<option>left<option>right</select></label></span>
+                 <label><input type="checkbox" name="compact" onchange="ChatTopBar.setCompactResults(this.checked)"><span>Display compact room search results.</span></label>
+                 <label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>
+                 <hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>
+                 <div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>
+                 <div class="ctb-fixheight" style="white-space:nowrap"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a>&nbsp;|&nbsp;<a href="#" id="ctb-show-log">Change Log</a></div>
+                 </div>`);
             $('#ctb-show-log').click(() => (showChangeLog(), showSettings(), false));
             let elem = $('#ctb-settings-dialog');
             elem.find('hr').css({'border':'0', 'border-bottom':$('#present-users').css('border-bottom')});
@@ -871,6 +892,7 @@ function MakeChatTopbar ($, tbData) {
             dialog.find('[name="linkify"]').prop('checked', setLinkifyDescriptions());
             dialog.find('[name="favvis"]').prop('checked', setFaviconVisible());
             dialog.find('[name="favstyle"]').val(setFaviconStyle());
+            dialog.find('[name="compact"]').prop('checked', setCompactResults());
             dialog.find('[name="open"]').prop('checked', setOpenRoomsHere());
             dialog.find('#ctb-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
@@ -1255,7 +1277,12 @@ function MakeChatTopbar ($, tbData) {
     // persistently. Returns the value of the option.
     function setSearchByActivity (byactivity) {
 
-        return loadOrStore('searchByActivity', byactivity, false);
+        byactivity = loadOrStore('searchByActivity', byactivity, false);
+
+        // For compact mode, determines which bit of info is displayed.
+        $('.topbar').attr('data-mc-result-sort', byactivity ? 'activity' : 'users');
+
+        return byactivity;
 
     }
 
@@ -1294,6 +1321,22 @@ function MakeChatTopbar ($, tbData) {
         $('.topbar').attr('data-mc-favicon-style', style);
 
         return style;
+
+    }
+
+    // Set whether or not to show chat room search results in "compact" mode. Default is
+    // false. Null or undefined loads the persistent setting. Saves setting persistently.
+    // Returns the value of the option.
+    function setCompactResults (compact) {
+
+        compact = loadOrStore('compactResults', compact, false);
+
+        if (compact)
+            $('.topbar').addClass('mc-compact-finder');
+        else
+            $('.topbar').removeClass('mc-compact-finder');
+
+        return compact;
 
     }
 
