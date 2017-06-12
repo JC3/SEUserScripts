@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.13
+// @version      1.14
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -20,20 +20,22 @@
 (function() {
     'use strict';
 
+    const NAMESPACE_UID = '9d2798e5-6d48-488c-924e-899a39b74954';
+
     // Firefox support: Store working copy of settings in tbData.
-    var tbData = {settings: {}, scriptVersion: GM_info.script.version};
+    var tbData = {settings: {}, scriptVersion: GM_info.script.version, uid: NAMESPACE_UID };
     for (let key of GM_listValues())
         tbData.settings[key] = GM_getValue(key);
 
     // Firefox support: Use events for settings instead of GM_* directly.
-    window.addEventListener('setvalue-9d2798e5-6d48-488c-924e-899a39b74954', function (ev) {
+    window.addEventListener(`setvalue-${NAMESPACE_UID}`, function (ev) {
         if (typeof ev.detail.key !== 'string' || typeof ev.detail.value !== 'string')
             return;
         GM_setValue(ev.detail.key, ev.detail.value);
     });
 
     // Firefox support: Use events for settings instead of GM_* directly.
-    window.addEventListener('deletevalue-9d2798e5-6d48-488c-924e-899a39b74954', function (ev) {
+    window.addEventListener(`deletevalue-${NAMESPACE_UID}`, function (ev) {
         if (typeof ev.detail.key !== 'string')
             return;
         GM_deleteValue(ev.detail.key);
@@ -94,10 +96,13 @@ function MakeChatTopbar ($, tbData) {
     });
 
     // The main chat server page has a topbar and is on the same domain, load it up
-    // in an invisible iframe.
+    // in an invisible iframe. Note: We load /faq, because / and the various room tab
+    // pages generally make periodic requests to e.g. /rooms and stuff to keep their
+    // info up to date, and there's no reason for us to be making background requests
+    // that we don't need. The /faq page doesn't do any periodic XHR stuff.
     var frame = $('<iframe/>')
        .css('display', 'none')
-       .attr('src', '/')
+       .attr('src', '/faq')
        .appendTo('body');
 
     // Start grabbing the account ID while the frame is loading to minimize load time.
@@ -151,6 +156,9 @@ function MakeChatTopbar ($, tbData) {
         setLinkifyDescriptions: setLinkifyDescriptions,
         setFaviconVisible: setFaviconVisible,
         setFaviconStyle: setFaviconStyle,
+        setCompactResults: setCompactResults,
+        setAutoLoadMore: setAutoLoadMore,
+        setPreserveSearch: setPreserveSearch,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
@@ -234,6 +242,8 @@ function MakeChatTopbar ($, tbData) {
             setBrightness();
             setFaviconVisible();
             setFaviconStyle();
+            setCompactResults();
+            setSearchByActivity(); // Sets data-mc-result-sort for compact mode styling.
 
             // Put settings link at bottom; we're doing this in here so that we don't make the
             // dialog available to the user before styles are loaded. Probably being paranoid.
@@ -511,8 +521,7 @@ function MakeChatTopbar ($, tbData) {
         topbar.find('.network-items > .topbar-icon:not(#mc-roomfinder-button)')
             .mouseenter((e) => (toggleRoomSearchDropdown('away', e.target), false));
 
-        // Create the dropdown. We can put it in the corral, then as a side-effect it'll
-        // get the overscroll fix applied to it as well.
+        // Create the dropdown. We might as well put it in the corral with the others.
         let search;
         let roomlist;
         let dropdown = $('<div class="topbar-dialog" id="mc-roomfinder-dialog"/>')
@@ -559,6 +568,21 @@ function MakeChatTopbar ($, tbData) {
         });
         blockOverscrollEvents(roomlist);
 
+        // Auto load more results scroll handler.
+        roomlist[0].onscroll = function (event) {
+            if (roomlist[0].scrollTop + roomlist[0].offsetHeight >= roomlist[0].scrollHeight - 2) {
+                if (setAutoLoadMore() && $('#mc-result-more').data('mc-auto-click'))
+                    $('#mc-result-more').data('mc-auto-click', false).click();
+            }
+        };
+
+        // If search parameters were preserved, restore them now.
+        let preserved = restoreSearchParams();
+        if (preserved) {
+            $('#mc-roomfinder-filter').val(preserved.filter);
+            $('#mc-roomfinder-tab').val(preserved.tab);
+        }
+
         // I'm sick of typing .css() everywhere. Style the search results in a stylesheet.
         // Note: We're cheating a little and styling select elements in the settings dialog
         // here, too. Should probably reorganize the stylesheets if this gets complicated.
@@ -566,21 +590,38 @@ function MakeChatTopbar ($, tbData) {
             .mc-result-container { padding: 10px; border-top: 1px solid #eff0f1; line-height: 1.3; display:block; }
             .mc-result-container[href]:hover { background: #f7f8f8; }
             .mc-result-container a:hover { text-decoration: underline; }
-            .mc-result-title { margin-bottom: 4px; }
+            .mc-result-title { margin-bottom: 4px; pointer-events: none; }
             .mc-result-title img { display: none; position: relative; top: -1px; }
+            .mc-result-title .mc-result-users { float: right; }
             .mc-result-description { margin-bottom: 4px; color: #2f3337; }
-            .mc-result-info { color: #848d95; }
+            .mc-result-info, .mc-result-users, .mc-result-activity { color: #848d95; }
+            .mc-result-compact-only { display: none; }
+            .mc-result-current .mc-result-title { font-weight: bold; }
+            .mc-result-current .mc-result-title > * { font-weight: normal; }
             .mc-favicon-visible .mc-result-title img { display: block; float: right; }
             .mc-favicon-visible[data-mc-favicon-style="left"] .mc-result-title img { float: left !important; margin-right: 1ex; }
             .mc-favicon-visible[data-mc-favicon-style="margin"] .mc-result-title img { float: left !important; margin-right: 1ex; }
             .mc-favicon-visible[data-mc-favicon-style="margin"] .mc-result-description { margin-left: calc(16px + 1ex); }
             .mc-favicon-visible[data-mc-favicon-style="margin"] .mc-result-info { margin-left: calc(16px + 1ex); }
+            .mc-favicon-visible[data-mc-favicon-style="right"].mc-compact-finder .mc-result-users { margin-right: 1ex; }
+            .mc-favicon-visible[data-mc-favicon-style="right"].mc-compact-finder .mc-result-activity { margin-right: 1ex; }
+            .mc-compact-finder .mc-result-container { padding: 5px 10px; }
+            .mc-compact-finder .mc-result-title { margin-bottom: inherit; pointer-events: auto; }
+            .mc-compact-finder .mc-result-description { display: none; }
+            .mc-compact-finder .mc-result-info { display: none; }
+            .mc-compact-finder .mc-result-compact-only { display: initial; }
+            .mc-compact-finder[data-mc-result-sort="users"] .mc-result-activity { display: none }
+            .mc-compact-finder[data-mc-result-sort="activity"] .mc-result-users { display: none }
             .mc-result-users { }
             .mc-result-activity { float: right; }
             #mc-result-more { color: #999; }
             .mc-result-more-link { font-weight: bold; color: #0077cc !important; }
             #mc-roomfinder-tab, #ctb-settings-dialog select { border: 1px solid #cbcbcb; box-shadow: inset 0 1px 2px #eff0f1,0 0 0 #FFF; color: #2f3337; }
-            .ui-widget select { font-family: inherit; font-size: inherit; }
+            .topbar-dialog.ui-widget select { font-family: inherit; font-size: inherit; }
+            /* The following styles prevent theme brightness from affecting hover/on. But they're kinda weird looking. */
+            /*.topbar .topbar-icon-on { filter: brightness(1.0) !important; }*/
+            /*.topbar .yes-hover:hover { filter: brightness(1.0) !important; }*/
+            /*.topbar .topbar-menu-links a:hover { filter: brightness(1.0) !important; }*/
            `).appendTo('head');
 
         // Site input does this but I don't really like it on the dropdown:
@@ -696,7 +737,7 @@ function MakeChatTopbar ($, tbData) {
         sinput.prop('disabled', !sinput.data('mc-auto'));
         sbutton.prop('disabled', true);
         stab.prop('disabled', true);
-        status.removeClass('mc-result-more-link');
+        status.removeClass('mc-result-more-link').data('mc-auto-click', false)
 
         // New search vs. loading more results.
         if (more && res.data('mc-params')) {
@@ -731,17 +772,25 @@ function MakeChatTopbar ($, tbData) {
                 roomcard = $(roomcard);
                 let result = {
                     name: roomcard.find('.room-name').text().trim(),
-                    description: roomcard.find('.room-description').html().trim(),
-                    activity: roomcard.find('.last-activity').html().trim(),
+                    description: roomcard.find('.room-description'),
+                    activity: roomcard.find('.last-activity'),
                     users: Number(roomcard.find('.room-users').attr('title').replace(/[^0-9]/g, '')),
                     id: Number(roomcard.attr('id').replace(/[^0-9]/g, '')),
                     icon: roomcard.find('.small-site-logo')
                 };
-                $(`<a class="mc-result-container mc-result-card mc-result-link"\>`)
+                let compactActivity = /^([\w\s]*)/.exec(result.activity.text());
+                compactActivity = (compactActivity ? compactActivity[1].trim() : '');
+                $(`<a class="mc-result-container mc-result-card mc-result-link${result.id === CHAT.CURRENT_ROOM_ID ? ' mc-result-current' : ''}"\>`)
                     .attr('href', `//${window.location.hostname}/rooms/${result.id}`)
-                    .append($('<div class="mc-result-title"/>').text(result.name).append(result.icon.removeClass("small-site-logo")))
-                    .append($('<div class="mc-result-description"/>').html(result.description).ctb_linkify(nolinks))
-                    .append($(`<div class="mc-result-info"><span class="mc-result-users">${withs(result.users, 'user')}</span><span class="mc-result-activity">${result.activity}</span></div>`))
+                    .click(() => (preserveSearchParams(params), true))
+                    .append($('<div class="mc-result-title"/>')
+                         .attr('title', result.description.text().trim())
+                         .text(result.name)
+                         .append(result.icon.removeClass("small-site-logo"))
+                         .append(`<span class="mc-result-users mc-result-compact-only">${withs(result.users, 'user')}</span>`)
+                         .append(`<span class="mc-result-activity mc-result-compact-only">${compactActivity}</span>`))
+                    .append($('<div class="mc-result-description"/>').html(result.description.html().trim()).ctb_linkify(nolinks))
+                    .append($(`<div class="mc-result-info"><span class="mc-result-users">${withs(result.users, 'user')}</span><span class="mc-result-activity">${result.activity.html().trim()}</span></div>`))
                     .appendTo(res);
             });
             if (doc.find('.pager a[rel="next"').length > 0) {
@@ -752,6 +801,7 @@ function MakeChatTopbar ($, tbData) {
                     .off('click')
                     .click(() => (doRoomSearch(true), false))
                     .attr('href', '#')
+                    .data('mc-auto-click', true)
                     .appendTo(res);
             } else if (res.find('.mc-result-card').length === 0) {
                 status
@@ -764,7 +814,11 @@ function MakeChatTopbar ($, tbData) {
             }
             setOpenRoomsHere(); // Update target attribute in result links.
         }).fail(function (e) {
-            res.text('An error occurred.');
+            status
+                .removeClass('mc-result-more-link')
+                .toggle(true)
+                .text('An error occurred.')
+                .ctb_noclick();
         }).always(function () {
             sinput.prop('disabled', false);
             sbutton.prop('disabled', false);
@@ -793,23 +847,24 @@ function MakeChatTopbar ($, tbData) {
         if ($('#ctb-settings-dialog').length === 0) {
             let title = (typeof tbData.scriptVersion === 'undefined' ? '' : ` (${tbData.scriptVersion})`);
             $('body').append(
-                `<div id="ctb-settings-dialog" title="Settings${title}">` +
-                '<label><input type="checkbox" name="themed" onchange="ChatTopBar.setThemed(this.checked)"><span>Use chat room themes</span></label>' +
-                '<label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>' +
-                '<label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>' +
-                '<label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>' +
-                '<label><input type="checkbox" name="autosearch" onchange="ChatTopBar.setAutoSearch(this.checked)"><span>Search for rooms as you type</span></label>' +
-                '<label><input type="checkbox" name="byactivity" onchange="ChatTopBar.setSearchByActivity(this.checked)"><span>Sort rooms by activity instead of people</span></label>' +
-                '<label><input type="checkbox" name="linkify" onchange="ChatTopBar.setLinkifyDescriptions(this.checked)"><span>Linkify URLs in search results</span></label>' +
-                '<label><input type="checkbox" name="open" onchange="ChatTopBar.setOpenRoomsHere(this.checked)"><span>Open search result rooms in this tab</span></label>' +
-                '<span style="display:flex;align-items:center;">' +
-                '<label><input type="checkbox" name="favvis" onchange="ChatTopBar.setFaviconVisible(this.checked)"><span>Display site icons in results:</span></label>' +
-                '    &nbsp;<select name="favstyle" onchange="ChatTopBar.setFaviconStyle(this.value)"><option>margin<option>left<option>right</select></label></span>' +
-                '<label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>' +
-                '<hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>' +
-                '<div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>' +
-                `<div class="ctb-fixheight" style="white-space:nowrap"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a>&nbsp;|&nbsp;<a href="#" id="ctb-show-log">Change Log</a></div>` +
-                '</div>');
+                `<div id="ctb-settings-dialog" title="Settings${title}">
+                 <label><input type="checkbox" name="themed" onchange="ChatTopBar.setThemed(this.checked)"><span>Use chat room themes</span></label>
+                 <label><input type="checkbox" name="widen" onchange="ChatTopBar.setWiden(this.checked)"><span>Wide layout</span></label>
+                 <label><input type="checkbox" name="switch" onchange="ChatTopBar.setShowSwitcher(this.checked)"><span>Show chat servers in SE dropdown</span></label>
+                 <label><input type="checkbox" name="rejoin" onchange="ChatTopBar.setRejoinOnSwitch(this.checked)"><span>Rejoin favorites on switch</span></label>
+                 <label><input type="checkbox" name="autosearch" onchange="ChatTopBar.setAutoSearch(this.checked)"><span>Search for rooms as you type</span></label>
+                 <label><input type="checkbox" name="byactivity" onchange="ChatTopBar.setSearchByActivity(this.checked)"><span>Sort rooms by activity instead of people</span></label>
+                 <label><input type="checkbox" name="linkify" onchange="ChatTopBar.setLinkifyDescriptions(this.checked)"><span>Linkify URLs in search results</span></label>
+                 <label><input type="checkbox" name="open" onchange="ChatTopBar.setOpenRoomsHere(this.checked)"><span>Open search result rooms in this tab</span></label>
+                 <span style="display:flex;align-items:center;">
+                 <label><input type="checkbox" name="favvis" onchange="ChatTopBar.setFaviconVisible(this.checked)"><span>Display site icons in results:</span></label>
+                     &nbsp;<select name="favstyle" onchange="ChatTopBar.setFaviconStyle(this.value)"><option>margin<option>left<option>right</select></label></span>
+                 <label><input type="checkbox" name="compact" onchange="ChatTopBar.setCompactResults(this.checked)"><span>Display compact room search results.</span></label>
+                 <label><input type="checkbox" name="quiet" onchange="ChatTopBar.setQuiet(this.checked)"><span>Suppress console output</span></label>
+                 <hr><label class="ctb-fixheight"><span>Brightness (this theme only):</span></label>
+                 <div class="ctb-fixheight"><div style="flex-grow:1" id="ctb-settings-brightness"></div></div><hr>
+                 <div class="ctb-fixheight" style="white-space:nowrap"><a href="${URL_UPDATES}">Updates</a>&nbsp;|&nbsp;<a href="${URL_MORE}">More Scripts</a>&nbsp;|&nbsp;<a href="#" id="ctb-show-log">Change Log</a></div>
+                 </div>`);
             $('#ctb-show-log').click(() => (showChangeLog(), showSettings(), false));
             let elem = $('#ctb-settings-dialog');
             elem.find('hr').css({'border':'0', 'border-bottom':$('#present-users').css('border-bottom')});
@@ -871,6 +926,7 @@ function MakeChatTopbar ($, tbData) {
             dialog.find('[name="linkify"]').prop('checked', setLinkifyDescriptions());
             dialog.find('[name="favvis"]').prop('checked', setFaviconVisible());
             dialog.find('[name="favstyle"]').val(setFaviconStyle());
+            dialog.find('[name="compact"]').prop('checked', setCompactResults());
             dialog.find('[name="open"]').prop('checked', setOpenRoomsHere());
             dialog.find('#ctb-settings-brightness').slider('value', 100.0 * setBrightness());
             dialog.dialog('open');
@@ -944,90 +1000,8 @@ function MakeChatTopbar ($, tbData) {
         if ($('#ctb-changes-dialog').length === 0) {
             let title = (typeof tbData.scriptVersion === 'undefined' ? '' : ` (${tbData.scriptVersion})`);
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
-            $('body').append(
-                `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
-                '<li class="ctb-version-item">1.13<li><ul>' +
-                '<li>Site icons are now displayed in room results. Three options for positioning are present in settings dialog (I could not decide).' +
-                '<li>The site icon <i>visibility</i> setting is per chat server. Seems reasonable given that MSE and SO rooms all have the same boring icons, while SE is very exciting.' +
-                '<li><span>ChatTopBar.setFaviconVisible</span> and <span>ChatTopBar.setFaviconStyle</span> to change icon settings.' +
-                '<li>Window event names made more unique to avoid future namespace collisions.</ul>' +
-                '<li class="ctb-version-item">1.12.3<li><ul>' +
-                '<li>Entire area of room search results is now clickable.' +
-                '<li>Option to linkify URLs in room search results (enabled by default).' +
-                '<li>Links in room search results are now underlined on hover, to make it clear what you\'re clicking on.' +
-                '<li><span>ChatTopBar.setLinkifyDescriptions</span> to change linkify option.' +
-                '<li>Add workaround for <a href="https://meta.stackexchange.com/q/297021/230261">chat highlighting style bug</a>.</ul>' +
-                '<li class="ctb-version-item">1.12.2<li><ul>' +
-                '<li>Fixed an issue introduced with Firefox support where topbar sometimes didn\'t load on Chrome.</ul>' +
-                '<li class="ctb-version-item">1.12<li><ul>' +
-                '<li>Integrated Shog9\'s awesome Firefox patch. Now works on Firefox!' +
-                '<li>Patch also lets it work on internal company chat rooms (which have an extra iframe).' +
-                '<li>Chat theme code updated to work on Firefox.</ul>' +
-                '<li class="ctb-version-item">1.11.3<li><ul>' +
-                '<li>Room dropdown button brightness fixed to match other buttons.' +
-                '<li>Also, theme brightness was being applied twice to that button.</ul>' +
-                '<li class="ctb-version-item">1.11.2<li><ul>' +
-                '<li>Fix match patterns to not run on room info pages.' +
-                '<li>Make flag icon (blue notifications on right) disappear on click.' +
-                '<li>Scrolling to replies no longer hides them under the topbar.' +
-                '<li>Overscrolling on change log no longer scrolls chat.' +
-                '<li>Overscrolling on room search results no longer scrolls chat.</ul>' +
-                '<li class="ctb-version-item">1.11.1<li><ul>' +
-                '<li>Topbar icon hover fixed (thanks Shog9!)' +
-                '<li>Update flasher notification now ignores revision number updates.</ul>' +
-                '<li class="ctb-version-item">1.11<li><ul>' +
-                '<li>Chat room search contains selector for room tab (all, mine, favorites).' +
-                '<li>Default search sort order is now by people, with option to use activity instead.' +
-                '<li><span>ChatTopBar.setSearchByActivity</span> to change sort order option.</ul>' +
-                '<li class="ctb-version-item">1.10<li><ul>' +
-                '<li>Search for chat rooms from the top bar! Click the chat icon near the left. Supports search-as-you-type (can be disabled), and optionally ' +
-                'lets you open rooms in the current tab. Try it! Check settings dialog for new options.' +
-                '<li><span>ChatTopBar</span> new functions for search options.' +
-                '<li>Cleaner list styling in the change log dialog.</ul>' +
-                '<li class="ctb-version-item">1.09<li><ul>' +
-                '<li>Clicking site search box in SE dropdown no longer closes dropdown.' +
-                '<li>Also, search box didn\'t work, anyways. Now it does.' +
-                '<li>Mousewheel over-scrolling on topbar dropdowns no longer scrolls chat.</ul>' +
-                '<li class="ctb-version-item">1.08<li><ul>' +
-                '<li>Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
-                '<li>Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
-                '<li>Brightness setting is now associated with the current room\'s theme rather than the room itself (so it applies to all rooms with the same theme). ' +
-                'Apologies for any reset settings (it does make a good attempt to copy them, though).' +
-                '<li>Change log now displayed after update (when flashing "topbar" link clicked).' +
-                '<li><span>ChatTopBar.showChangeLog()</span> will always show the change log, too.' +
-                '<li><span>ChatTopBar</span> functions for additional settings added.' +
-                '<li>Don\'t load jQuery UI if it\'s already loaded.' +
-                '<li>Don\'t run in iframes (by default), for compatibility with some other scripts. <span>ChatTopBar.setRunInFrame()</span> can control this.' +
-                '<li>Don\'t run in mobile chat layout, for compatibility with some other scripts..</ul>' +
-                '<li class="ctb-version-item">1.07<li><ul>' +
-                '<li>Settings dialog (accessible from "topbar" link in footer).' +
-                '<li>Wide mode now matches right side padding instead of fixed at 95%.' +
-                '<li>More descriptive search box placeholders.' +
-                '<li><span>ChatTopBar.forgetEverything</span>, for testing.</ul>' +
-                '<li class="ctb-version-item">1.06<li><ul>' +
-                '<li>Brightness now only applied if theme enabled.' +
-                '<li>Sidebar resized so it doesn\'t hide behind the bottom panel.' +
-                '<li><span>ChatTopBar.fakeUnreadCounts(inbox,rep)</span> for debugging.' +
-                '<li>Explicit <span>unsafeWindow</span> grant.' +
-                '<li>Sort output of <span>dumpSettings()</span>.</ul>' +
-                '<li class="ctb-version-item">1.05<li><ul>' +
-                '<li>Per-room icon/text brightness option.' +
-                '<li>Option to suppress console output.' +
-                '<li>Ability to dump settings to console for testing.' +
-                '<li>Fixed a style bug where things were happening before CSS was loaded, was sometimes causing non-themed topbar to have a white background instead of black.</ul>' +
-                '<li class="ctb-version-item">1.03<li><ul>' +
-                '<li><span>ChatTopBar</span> console interface for setting options.' +
-                '<li>Widen / theme options now user-settable.' +
-                '<li>Ability to forget cached account ID for testing.</ul>' +
-                '<li class="ctb-version-item">1.02<li><ul>' +
-                '<li>WebSocket reconnect when connection lost.' +
-                '<li>Beta code for themed topbar.' +
-                '<li>Better console logging.</ul>' +
-                '<li class="ctb-version-item">1.01<li><ul>' +
-                '<li>Realtime event handling via websocket.</ul>' +
-                '<li class="ctb-version-item">1.00<li><ul>' +
-                '<li>Initial version.</ul>' +
-                '</ul></div>');
+            $('body').append(`<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}">` +
+                             `<div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div>${CHANGE_LOG_HTML}</div>`);
             $('.ctb-version-item, .ctb-important').css({'margin-top': '1.5ex', 'font-size': '120%'});
             $('.ctb-version-item').css({'font-weight': 'bold'});
             $('#ctb-changes-list ul').css('margin-left', '2ex');
@@ -1177,7 +1151,7 @@ function MakeChatTopbar ($, tbData) {
         brightness = loadOrStore(key, brightness, 1.0);
 
         let themed = load('themed', false);
-        $('.network-items > .topbar-icon, .topbar-menu-links').css('filter', `brightness(${themed ? brightness : 1.0})`);
+        $('.network-items > .topbar-icon, .topbar-menu-links > a').css('filter', `brightness(${themed ? brightness : 1.0})`);
 
         return brightness;
 
@@ -1222,14 +1196,16 @@ function MakeChatTopbar ($, tbData) {
     // Set whether or not rooms chosen from the room finder load in this frame or a
     // new tab. Default is true (this frame). Null or undefined loads the persistent
     // setting. Saves setting persistently. Returns the value of the option.
-    function setOpenRoomsHere (open) {
+    function setOpenRoomsHere (open, noop) {
 
         open = loadOrStore('openRoomsHere', open, true);
 
-        if (open)
-            $('.mc-result-link').attr('target', '_top');
-        else
-            $('.mc-result-link').removeAttr('target');
+        if (!noop) {
+            if (open)
+                $('.mc-result-link').attr('target', '_top');
+            else
+                $('.mc-result-link').removeAttr('target');
+        }
 
         return open;
 
@@ -1255,7 +1231,12 @@ function MakeChatTopbar ($, tbData) {
     // persistently. Returns the value of the option.
     function setSearchByActivity (byactivity) {
 
-        return loadOrStore('searchByActivity', byactivity, false);
+        byactivity = loadOrStore('searchByActivity', byactivity, false);
+
+        // For compact mode, determines which bit of info is displayed.
+        $('.topbar').attr('data-mc-result-sort', byactivity ? 'activity' : 'users');
+
+        return byactivity;
 
     }
 
@@ -1285,15 +1266,50 @@ function MakeChatTopbar ($, tbData) {
     }
 
     // Set the favicon style in the room search list. Valid values are 'right', 'left',
-    // or 'margin'. Default is 'left'. Null or undefined loads the persistent
+    // or 'margin'. Default is 'margin'. Null or undefined loads the persistent
     // setting. Saves setting persistently. Returns the value of the option.
     function setFaviconStyle (style) {
 
-        style = loadOrStore('faviconStyle', style, 'left');
+        style = loadOrStore('faviconStyle', style, 'margin');
 
         $('.topbar').attr('data-mc-favicon-style', style);
 
         return style;
+
+    }
+
+    // Set whether or not to show chat room search results in "compact" mode. Default is
+    // false. Null or undefined loads the persistent setting. Saves setting persistently.
+    // Returns the value of the option.
+    function setCompactResults (compact) {
+
+        compact = loadOrStore('compactResults', compact, false);
+
+        if (compact)
+            $('.topbar').addClass('mc-compact-finder');
+        else
+            $('.topbar').removeClass('mc-compact-finder');
+
+        return compact;
+
+    }
+
+    // Set whether or not to automatically load more room search results when the user has
+    // scrolled to the bottom of the result list. Default is false. Null or undefined
+    // loads the persistent setting. Saves setting persistently. Returns the value of the
+    // option.
+    function setAutoLoadMore (auto) {
+
+        return loadOrStore('autoLoadResults', auto, false);
+
+    }
+
+    // Set whether or not search filter is restored after visiting a room through the room
+    // search result list. Default is true. Null or undefined loads the persistent setting.
+    // Saves setting persistently. Returns the value of the option.
+    function setPreserveSearch (preserve) {
+
+        return loadOrStore('preserveSearchParams', preserve, true);
 
     }
 
@@ -1306,16 +1322,41 @@ function MakeChatTopbar ($, tbData) {
 
     }
 
-    // Helper for managing default settings. If value is undefined then a default is
-    // returned, otherwise the value is stored and returned.
-    function loadOrStore (key, value, def) {
+    // Preserve search results. I wanted something short-lived, tab-scoped, and persistent
+    // across a page reload, so this uses window.name. It will only work if window.name is
+    // empty going in, to reduce the chance of interfering with other people's scripts that
+    // may be using it for other things.
+    function preserveSearchParams (params) {
 
-        if (value === null || value === undefined)
-            value = load(key, def);
-        else
-            store(key, value);
+        if (setOpenRoomsHere(undefined, true) && setPreserveSearch()) {
+            if (window.name) {
+                log('Not preserving search params, window.name appears occupied.');
+            } else {
+                window.name = JSON.stringify({
+                    magic: tbData.uid,
+                    tab: params.tab,
+                    filter: params.filter
+                });
+            }
+        }
 
-        return value;
+    }
+
+    // Restore (and clear) preserved search results, if any.
+    function restoreSearchParams () {
+
+        try {
+            let params = JSON.parse(window.name);
+            if (params.magic === tbData.uid) { // Make sure its ours and not some other script.
+                window.name = '';
+                delete params.magic;
+                log(`Found preserved search params: ${JSON.stringify(params)}`);
+                return params;
+            }
+        } catch (e) {
+        }
+
+        return null;
 
     }
 
@@ -1344,7 +1385,17 @@ function MakeChatTopbar ($, tbData) {
     // Reset one setting.
     function forgetSetting (key) {
         delete tbData.settings[key];
-        window.dispatchEvent(new CustomEvent('deletevalue-9d2798e5-6d48-488c-924e-899a39b74954', {detail: {key: key}}));
+        window.dispatchEvent(new CustomEvent(`deletevalue-${tbData.uid}`, {detail: {key: key}}));
+    }
+
+    // Helper for managing default settings. If value is undefined then the stored
+    // value or a default is returned, otherwise the value is stored and returned.
+    function loadOrStore (key, value, def) {
+        if (value === null || value === undefined)
+            value = load(key, def);
+        else
+            store(key, value);
+        return value;
     }
 
     // Helper for GM_setValue.
@@ -1352,7 +1403,7 @@ function MakeChatTopbar ($, tbData) {
         // Only strings allowed.
         value = String(value);
         tbData.settings[key] = value;
-        window.dispatchEvent(new CustomEvent('setvalue-9d2798e5-6d48-488c-924e-899a39b74954', {detail: {key: key, value: value}}));
+        window.dispatchEvent(new CustomEvent(`setvalue-${tbData.uid}`, {detail: {key: key, value: value}}));
     }
 
     // Helper for GM_getValue.
@@ -1392,6 +1443,109 @@ function MakeChatTopbar ($, tbData) {
             .replace(pseudoUrlPattern, '$1<a href="http://$2">$2</a>')
             .replace(emailAddressPattern, '<a href="mailto:$&">$&</a>');
     }
+
+    //==============================================================================================
+
+    const CHANGE_LOG_HTML = `
+        <ul id="ctb-changes-list">
+        <li class="ctb-version-item">1.14<li><ul>
+        <li>New "compact" view for room search results (check it out in settings).
+        <li>Search params are now preserved across room changes when room is visited from result list
+            and "open search result rooms in this tab" is enabled. (Can be disabled with
+            <span>ChatTopBar.setPreserveSearch(false)</span>, no option in settings dialog.)
+        <li>Title of current room is bold in room search.
+        <li>Default site icon position changed to 'margin'. Previous default was 'left', you'll
+            have to explicitly pick it if you wish to return to it (sorry).
+        <li>Option to automatically load more results when scrolling to bottom of room search list.
+            It's experimental and can only be enabled via console (<span>ChatTopBar.setAutoLoadMore(true)</span>).
+        <li>Room search server errors no longer break the search dropdown.
+        <li>Topbar source iframe was continuously generating a lot of background XHR noise, since
+            it was / and would periodically refresh room/event/user lists, etc. Now loads /faq
+            instead, which prevents loads of unnecessary requests.
+        <li><span>ChatTopBar.setCompactCompactResults</span> to support compact mode option.
+        <li>Misc. code and source comment tweaks.</ul>
+        <li class="ctb-version-item">1.13<li><ul>
+        <li>Site icons are now displayed in room results. Three options for positioning are present in settings dialog (I could not decide).
+        <li>The site icon <i>visibility</i> setting is per chat server. Seems reasonable given that MSE and SO rooms all have the same boring icons, while SE is very exciting.
+        <li><span>ChatTopBar.setFaviconVisible</span> and <span>ChatTopBar.setFaviconStyle</span> to change icon settings.
+        <li>Window event names made more unique to avoid future namespace collisions.</ul>
+        <li class="ctb-version-item">1.12.3<li><ul>
+        <li>Entire area of room search results is now clickable.
+        <li>Option to linkify URLs in room search results (enabled by default).
+        <li>Links in room search results are now underlined on hover, to make it clear what you're clicking on.
+        <li><span>ChatTopBar.setLinkifyDescriptions</span> to change linkify option.
+        <li>Add workaround for <a href="https://meta.stackexchange.com/q/297021/230261">chat highlighting style bug</a>.</ul>
+        <li class="ctb-version-item">1.12.2<li><ul>
+        <li>Fixed an issue introduced with Firefox support where topbar sometimes didn't load on Chrome.</ul>
+        <li class="ctb-version-item">1.12<li><ul>
+        <li>Integrated Shog9's awesome Firefox patch. Now works on Firefox!
+        <li>Patch also lets it work on internal company chat rooms (which have an extra iframe).
+        <li>Chat theme code updated to work on Firefox.</ul>
+        <li class="ctb-version-item">1.11.3<li><ul>
+        <li>Room dropdown button brightness fixed to match other buttons.
+        <li>Also, theme brightness was being applied twice to that button.</ul>
+        <li class="ctb-version-item">1.11.2<li><ul>
+        <li>Fix match patterns to not run on room info pages.
+        <li>Make flag icon (blue notifications on right) disappear on click.
+        <li>Scrolling to replies no longer hides them under the topbar.
+        <li>Overscrolling on change log no longer scrolls chat.
+        <li>Overscrolling on room search results no longer scrolls chat.</ul>
+        <li class="ctb-version-item">1.11.1<li><ul>
+        <li>Topbar icon hover fixed (thanks Shog9!)
+        <li>Update flasher notification now ignores revision number updates.</ul>
+        <li class="ctb-version-item">1.11<li><ul>
+        <li>Chat room search contains selector for room tab (all, mine, favorites).
+        <li>Default search sort order is now by people, with option to use activity instead.
+        <li><span>ChatTopBar.setSearchByActivity</span> to change sort order option.</ul>
+        <li class="ctb-version-item">1.10<li><ul>
+        <li>Search for chat rooms from the top bar! Click the chat icon near the left. Supports search-as-you-type (can be disabled), and optionally
+        lets you open rooms in the current tab. Try it! Check settings dialog for new options.
+        <li><span>ChatTopBar</span> new functions for search options.
+        <li>Cleaner list styling in the change log dialog.</ul>
+        <li class="ctb-version-item">1.09<li><ul>
+        <li>Clicking site search box in SE dropdown no longer closes dropdown.
+        <li>Also, search box didn't work, anyways. Now it does.
+        <li>Mousewheel over-scrolling on topbar dropdowns no longer scrolls chat.</ul>
+        <li class="ctb-version-item">1.08<li><ul>
+        <li>Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).
+        <li>Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).
+        <li>Brightness setting is now associated with the current room's theme rather than the room itself (so it applies to all rooms with the same theme).
+        Apologies for any reset settings (it does make a good attempt to copy them, though).
+        <li>Change log now displayed after update (when flashing "topbar" link clicked).
+        <li><span>ChatTopBar.showChangeLog()</span> will always show the change log, too.
+        <li><span>ChatTopBar</span> functions for additional settings added.
+        <li>Don't load jQuery UI if it's already loaded.
+        <li>Don't run in iframes (by default), for compatibility with some other scripts. <span>ChatTopBar.setRunInFrame()</span> can control this.
+        <li>Don't run in mobile chat layout, for compatibility with some other scripts..</ul>
+        <li class="ctb-version-item">1.07<li><ul>
+        <li>Settings dialog (accessible from "topbar" link in footer).
+        <li>Wide mode now matches right side padding instead of fixed at 95%.
+        <li>More descriptive search box placeholders.
+        <li><span>ChatTopBar.forgetEverything</span>, for testing.</ul>
+        <li class="ctb-version-item">1.06<li><ul>
+        <li>Brightness now only applied if theme enabled.
+        <li>Sidebar resized so it doesn't hide behind the bottom panel.
+        <li><span>ChatTopBar.fakeUnreadCounts(inbox,rep)</span> for debugging.
+        <li>Explicit <span>unsafeWindow</span> grant.
+        <li>Sort output of <span>dumpSettings()</span>.</ul>
+        <li class="ctb-version-item">1.05<li><ul>
+        <li>Per-room icon/text brightness option.
+        <li>Option to suppress console output.
+        <li>Ability to dump settings to console for testing.
+        <li>Fixed a style bug where things were happening before CSS was loaded, was sometimes causing non-themed topbar to have a white background instead of black.</ul>
+        <li class="ctb-version-item">1.03<li><ul>
+        <li><span>ChatTopBar</span> console interface for setting options.
+        <li>Widen / theme options now user-settable.
+        <li>Ability to forget cached account ID for testing.</ul>
+        <li class="ctb-version-item">1.02<li><ul>
+        <li>WebSocket reconnect when connection lost.
+        <li>Beta code for themed topbar.
+        <li>Better console logging.</ul>
+        <li class="ctb-version-item">1.01<li><ul>
+        <li>Realtime event handling via websocket.</ul>
+        <li class="ctb-version-item">1.00<li><ul>
+        <li>Initial version.</ul>
+        </ul>`;
 
 }
 })();
