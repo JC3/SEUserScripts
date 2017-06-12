@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.14-dev2
+// @version      1.14-dev3
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -20,20 +20,22 @@
 (function() {
     'use strict';
 
+    const NAMESPACE_UID = '9d2798e5-6d48-488c-924e-899a39b74954';
+
     // Firefox support: Store working copy of settings in tbData.
-    var tbData = {settings: {}, scriptVersion: GM_info.script.version};
+    var tbData = {settings: {}, scriptVersion: GM_info.script.version, uid: NAMESPACE_UID };
     for (let key of GM_listValues())
         tbData.settings[key] = GM_getValue(key);
 
     // Firefox support: Use events for settings instead of GM_* directly.
-    window.addEventListener('setvalue-9d2798e5-6d48-488c-924e-899a39b74954', function (ev) {
+    window.addEventListener(`setvalue-${NAMESPACE_UID}`, function (ev) {
         if (typeof ev.detail.key !== 'string' || typeof ev.detail.value !== 'string')
             return;
         GM_setValue(ev.detail.key, ev.detail.value);
     });
 
     // Firefox support: Use events for settings instead of GM_* directly.
-    window.addEventListener('deletevalue-9d2798e5-6d48-488c-924e-899a39b74954', function (ev) {
+    window.addEventListener(`deletevalue-${NAMESPACE_UID}`, function (ev) {
         if (typeof ev.detail.key !== 'string')
             return;
         GM_deleteValue(ev.detail.key);
@@ -153,6 +155,7 @@ function MakeChatTopbar ($, tbData) {
         setFaviconStyle: setFaviconStyle,
         setCompactResults: setCompactResults,
         setAutoLoadMore: setAutoLoadMore,
+        setPreserveSearch: setPreserveSearch,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
         forgetAccount: () => store('account', null),
@@ -515,8 +518,7 @@ function MakeChatTopbar ($, tbData) {
         topbar.find('.network-items > .topbar-icon:not(#mc-roomfinder-button)')
             .mouseenter((e) => (toggleRoomSearchDropdown('away', e.target), false));
 
-        // Create the dropdown. We can put it in the corral, then as a side-effect it'll
-        // get the overscroll fix applied to it as well.
+        // Create the dropdown. We might as well put it in the corral with the others.
         let search;
         let roomlist;
         let dropdown = $('<div class="topbar-dialog" id="mc-roomfinder-dialog"/>')
@@ -563,12 +565,20 @@ function MakeChatTopbar ($, tbData) {
         });
         blockOverscrollEvents(roomlist);
 
+        // Auto load more results scroll handler.
         roomlist[0].onscroll = function (event) {
             if (roomlist[0].scrollTop + roomlist[0].offsetHeight >= roomlist[0].scrollHeight - 2) {
                 if (setAutoLoadMore() && $('#mc-result-more').data('mc-auto-click'))
                     $('#mc-result-more').data('mc-auto-click', false).click();
             }
         };
+
+        // If search parameters were preserved, restore them now.
+        let preserved = restoreSearchParams();
+        if (preserved) {
+            $('#mc-roomfinder-filter').val(preserved.filter);
+            $('#mc-roomfinder-tab').val(preserved.tab);
+        }
 
         // I'm sick of typing .css() everywhere. Style the search results in a stylesheet.
         // Note: We're cheating a little and styling select elements in the settings dialog
@@ -708,7 +718,7 @@ function MakeChatTopbar ($, tbData) {
     }
 
     // Perform room search.
-    function doRoomSearch (more) {
+    function doRoomSearch (more, initparams) {
 
         let res = $('#mc-roomfinder-results');
         let status = $('#mc-result-more');
@@ -765,6 +775,7 @@ function MakeChatTopbar ($, tbData) {
                 compactActivity = (compactActivity ? compactActivity[1].trim() : '');
                 $(`<a class="mc-result-container mc-result-card mc-result-link${result.id === CHAT.CURRENT_ROOM_ID ? ' mc-result-current' : ''}"\>`)
                     .attr('href', `//${window.location.hostname}/rooms/${result.id}`)
+                    .click(() => (preserveSearchParams(params), true))
                     .append($('<div class="mc-result-title"/>')
                          .attr('title', result.description.text().trim())
                          .text(result.name)
@@ -796,7 +807,11 @@ function MakeChatTopbar ($, tbData) {
             }
             setOpenRoomsHere(); // Update target attribute in result links.
         }).fail(function (e) {
-            res.text('An error occurred.');
+            status
+                .removeClass('mc-result-more-link')
+                .toggle(true)
+                .text('An error occurred.')
+                .ctb_noclick();
         }).always(function () {
             sinput.prop('disabled', false);
             sbutton.prop('disabled', false);
@@ -1362,6 +1377,15 @@ function MakeChatTopbar ($, tbData) {
 
     }
 
+    // Set whether or not search filter is restored after visiting a room through the room
+    // search result list. Default is true. Null or undefined loads the persistent setting.
+    // Saves setting persistently. Returns the value of the option.
+    function setPreserveSearch (preserve) {
+
+        return loadOrStore('preserveSearchParams', preserve, true);
+
+    }
+
     // Set whether or not the topbar loads in an iframe. Default is false. Null or
     // undefined loads the persistent setting. Saves setting persistently. Returns the
     // value of the option.
@@ -1371,16 +1395,41 @@ function MakeChatTopbar ($, tbData) {
 
     }
 
-    // Helper for managing default settings. If value is undefined then a default is
-    // returned, otherwise the value is stored and returned.
-    function loadOrStore (key, value, def) {
+    // Preserve search results. I wanted something short-lived, tab-scoped, and persistent
+    // across a page reload, so this uses window.name. It will only work if window.name is
+    // empty going in, to reduce the chance of interfering with other people's scripts that
+    // may be using it for other things.
+    function preserveSearchParams (params) {
 
-        if (value === null || value === undefined)
-            value = load(key, def);
-        else
-            store(key, value);
+        if (setPreserveSearch()) {
+            if (window.name) {
+                log('Not preserving search params, window.name appears occupied.');
+            } else {
+                window.name = JSON.stringify({
+                    magic: tbData.uid,
+                    tab: params.tab,
+                    filter: params.filter
+                });
+            }
+        }
 
-        return value;
+    }
+
+    // Restore (and clear) preserved search results, if any.
+    function restoreSearchParams () {
+
+        try {
+            let params = JSON.parse(window.name);
+            if (params.magic === tbData.uid) { // Make sure its ours and not some other script.
+                window.name = '';
+                delete params.magic;
+                log(`Found preserved search params: ${JSON.stringify(params)}`);
+                return params;
+            }
+        } catch (e) {
+        }
+
+        return null;
 
     }
 
@@ -1409,7 +1458,17 @@ function MakeChatTopbar ($, tbData) {
     // Reset one setting.
     function forgetSetting (key) {
         delete tbData.settings[key];
-        window.dispatchEvent(new CustomEvent('deletevalue-9d2798e5-6d48-488c-924e-899a39b74954', {detail: {key: key}}));
+        window.dispatchEvent(new CustomEvent(`deletevalue-${tbData.uid}`, {detail: {key: key}}));
+    }
+
+    // Helper for managing default settings. If value is undefined then the stored
+    // value or a default is returned, otherwise the value is stored and returned.
+    function loadOrStore (key, value, def) {
+        if (value === null || value === undefined)
+            value = load(key, def);
+        else
+            store(key, value);
+        return value;
     }
 
     // Helper for GM_setValue.
@@ -1417,7 +1476,7 @@ function MakeChatTopbar ($, tbData) {
         // Only strings allowed.
         value = String(value);
         tbData.settings[key] = value;
-        window.dispatchEvent(new CustomEvent('setvalue-9d2798e5-6d48-488c-924e-899a39b74954', {detail: {key: key, value: value}}));
+        window.dispatchEvent(new CustomEvent(`setvalue-${tbData.uid}`, {detail: {key: key, value: value}}));
     }
 
     // Helper for GM_getValue.
