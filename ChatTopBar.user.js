@@ -1196,14 +1196,16 @@ function MakeChatTopbar ($, tbData) {
     // Set whether or not rooms chosen from the room finder load in this frame or a
     // new tab. Default is true (this frame). Null or undefined loads the persistent
     // setting. Saves setting persistently. Returns the value of the option.
-    function setOpenRoomsHere (open) {
+    function setOpenRoomsHere (open, noop) {
 
         open = loadOrStore('openRoomsHere', open, true);
 
-        if (open)
-            $('.mc-result-link').attr('target', '_top');
-        else
-            $('.mc-result-link').removeAttr('target');
+        if (!noop) {
+            if (open)
+                $('.mc-result-link').attr('target', '_top');
+            else
+                $('.mc-result-link').removeAttr('target');
+        }
 
         return open;
 
@@ -1264,11 +1266,11 @@ function MakeChatTopbar ($, tbData) {
     }
 
     // Set the favicon style in the room search list. Valid values are 'right', 'left',
-    // or 'margin'. Default is 'left'. Null or undefined loads the persistent
+    // or 'margin'. Default is 'margin'. Null or undefined loads the persistent
     // setting. Saves setting persistently. Returns the value of the option.
     function setFaviconStyle (style) {
 
-        style = loadOrStore('faviconStyle', style, 'left');
+        style = loadOrStore('faviconStyle', style, 'margin');
 
         $('.topbar').attr('data-mc-favicon-style', style);
 
@@ -1326,7 +1328,7 @@ function MakeChatTopbar ($, tbData) {
     // may be using it for other things.
     function preserveSearchParams (params) {
 
-        if (setPreserveSearch()) {
+        if (setOpenRoomsHere(undefined, true) && setPreserveSearch()) {
             if (window.name) {
                 log('Not preserving search params, window.name appears occupied.');
             } else {
@@ -1446,6 +1448,22 @@ function MakeChatTopbar ($, tbData) {
 
     const CHANGE_LOG_HTML = `
         <ul id="ctb-changes-list">
+        <li class="ctb-version-item">1.14<li><ul>
+        <li>New "compact" view for room search results (check it out in settings).
+        <li>Search params are now preserved across room changes when room is visited from result list
+            and "open search result rooms in this tab" is enabled. (Can be disabled with
+            <span>ChatTopBar.setPreserveSearch(false)</span>, no option in settings dialog.)
+        <li>Title of current room is bold in room search.
+        <li>Default site icon position changed to 'margin'. Previous default was 'left', you'll
+            have to explicitly pick it if you wish to return to it (sorry).
+        <li>Option to automatically load more results when scrolling to bottom of room search list.
+            It's experimental and can only be enabled via console (<span>ChatTopBar.setAutoLoadMore(true)</span>).
+        <li>Room search server errors no longer break the search dropdown.
+        <li>Topbar source iframe was continuously generating a lot of background XHR noise, since
+            it was / and would periodically refresh room/event/user lists, etc. Now loads /faq
+            instead, which prevents loads of unnecessary requests.
+        <li><span>ChatTopBar.setCompactCompactResults</span> to support compact mode option.
+        <li>Misc. code and source comment tweaks.</ul>
         <li class="ctb-version-item">1.13<li><ul>
         <li>Site icons are now displayed in room results. Three options for positioning are present in settings dialog (I could not decide).
         <li>The site icon <i>visibility</i> setting is per chat server. Seems reasonable given that MSE and SO rooms all have the same boring icons, while SE is very exciting.
