@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.14-dev5
+// @version      1.14
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -1000,90 +1000,8 @@ function MakeChatTopbar ($, tbData) {
         if ($('#ctb-changes-dialog').length === 0) {
             let title = (typeof tbData.scriptVersion === 'undefined' ? '' : ` (${tbData.scriptVersion})`);
             let devmsg = title.includes('dev') ? ' <b>You\'re using a development version, you won\'t receive release updates until you reinstall from the StackApps page again.</b>' : '';
-            $('body').append(
-                `<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}"><div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div><ul id="ctb-changes-list">` +
-                '<li class="ctb-version-item">1.13<li><ul>' +
-                '<li>Site icons are now displayed in room results. Three options for positioning are present in settings dialog (I could not decide).' +
-                '<li>The site icon <i>visibility</i> setting is per chat server. Seems reasonable given that MSE and SO rooms all have the same boring icons, while SE is very exciting.' +
-                '<li><span>ChatTopBar.setFaviconVisible</span> and <span>ChatTopBar.setFaviconStyle</span> to change icon settings.' +
-                '<li>Window event names made more unique to avoid future namespace collisions.</ul>' +
-                '<li class="ctb-version-item">1.12.3<li><ul>' +
-                '<li>Entire area of room search results is now clickable.' +
-                '<li>Option to linkify URLs in room search results (enabled by default).' +
-                '<li>Links in room search results are now underlined on hover, to make it clear what you\'re clicking on.' +
-                '<li><span>ChatTopBar.setLinkifyDescriptions</span> to change linkify option.' +
-                '<li>Add workaround for <a href="https://meta.stackexchange.com/q/297021/230261">chat highlighting style bug</a>.</ul>' +
-                '<li class="ctb-version-item">1.12.2<li><ul>' +
-                '<li>Fixed an issue introduced with Firefox support where topbar sometimes didn\'t load on Chrome.</ul>' +
-                '<li class="ctb-version-item">1.12<li><ul>' +
-                '<li>Integrated Shog9\'s awesome Firefox patch. Now works on Firefox!' +
-                '<li>Patch also lets it work on internal company chat rooms (which have an extra iframe).' +
-                '<li>Chat theme code updated to work on Firefox.</ul>' +
-                '<li class="ctb-version-item">1.11.3<li><ul>' +
-                '<li>Room dropdown button brightness fixed to match other buttons.' +
-                '<li>Also, theme brightness was being applied twice to that button.</ul>' +
-                '<li class="ctb-version-item">1.11.2<li><ul>' +
-                '<li>Fix match patterns to not run on room info pages.' +
-                '<li>Make flag icon (blue notifications on right) disappear on click.' +
-                '<li>Scrolling to replies no longer hides them under the topbar.' +
-                '<li>Overscrolling on change log no longer scrolls chat.' +
-                '<li>Overscrolling on room search results no longer scrolls chat.</ul>' +
-                '<li class="ctb-version-item">1.11.1<li><ul>' +
-                '<li>Topbar icon hover fixed (thanks Shog9!)' +
-                '<li>Update flasher notification now ignores revision number updates.</ul>' +
-                '<li class="ctb-version-item">1.11<li><ul>' +
-                '<li>Chat room search contains selector for room tab (all, mine, favorites).' +
-                '<li>Default search sort order is now by people, with option to use activity instead.' +
-                '<li><span>ChatTopBar.setSearchByActivity</span> to change sort order option.</ul>' +
-                '<li class="ctb-version-item">1.10<li><ul>' +
-                '<li>Search for chat rooms from the top bar! Click the chat icon near the left. Supports search-as-you-type (can be disabled), and optionally ' +
-                'lets you open rooms in the current tab. Try it! Check settings dialog for new options.' +
-                '<li><span>ChatTopBar</span> new functions for search options.' +
-                '<li>Cleaner list styling in the change log dialog.</ul>' +
-                '<li class="ctb-version-item">1.09<li><ul>' +
-                '<li>Clicking site search box in SE dropdown no longer closes dropdown.' +
-                '<li>Also, search box didn\'t work, anyways. Now it does.' +
-                '<li>Mousewheel over-scrolling on topbar dropdowns no longer scrolls chat.</ul>' +
-                '<li class="ctb-version-item">1.08<li><ul>' +
-                '<li>Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).' +
-                '<li>Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).' +
-                '<li>Brightness setting is now associated with the current room\'s theme rather than the room itself (so it applies to all rooms with the same theme). ' +
-                'Apologies for any reset settings (it does make a good attempt to copy them, though).' +
-                '<li>Change log now displayed after update (when flashing "topbar" link clicked).' +
-                '<li><span>ChatTopBar.showChangeLog()</span> will always show the change log, too.' +
-                '<li><span>ChatTopBar</span> functions for additional settings added.' +
-                '<li>Don\'t load jQuery UI if it\'s already loaded.' +
-                '<li>Don\'t run in iframes (by default), for compatibility with some other scripts. <span>ChatTopBar.setRunInFrame()</span> can control this.' +
-                '<li>Don\'t run in mobile chat layout, for compatibility with some other scripts..</ul>' +
-                '<li class="ctb-version-item">1.07<li><ul>' +
-                '<li>Settings dialog (accessible from "topbar" link in footer).' +
-                '<li>Wide mode now matches right side padding instead of fixed at 95%.' +
-                '<li>More descriptive search box placeholders.' +
-                '<li><span>ChatTopBar.forgetEverything</span>, for testing.</ul>' +
-                '<li class="ctb-version-item">1.06<li><ul>' +
-                '<li>Brightness now only applied if theme enabled.' +
-                '<li>Sidebar resized so it doesn\'t hide behind the bottom panel.' +
-                '<li><span>ChatTopBar.fakeUnreadCounts(inbox,rep)</span> for debugging.' +
-                '<li>Explicit <span>unsafeWindow</span> grant.' +
-                '<li>Sort output of <span>dumpSettings()</span>.</ul>' +
-                '<li class="ctb-version-item">1.05<li><ul>' +
-                '<li>Per-room icon/text brightness option.' +
-                '<li>Option to suppress console output.' +
-                '<li>Ability to dump settings to console for testing.' +
-                '<li>Fixed a style bug where things were happening before CSS was loaded, was sometimes causing non-themed topbar to have a white background instead of black.</ul>' +
-                '<li class="ctb-version-item">1.03<li><ul>' +
-                '<li><span>ChatTopBar</span> console interface for setting options.' +
-                '<li>Widen / theme options now user-settable.' +
-                '<li>Ability to forget cached account ID for testing.</ul>' +
-                '<li class="ctb-version-item">1.02<li><ul>' +
-                '<li>WebSocket reconnect when connection lost.' +
-                '<li>Beta code for themed topbar.' +
-                '<li>Better console logging.</ul>' +
-                '<li class="ctb-version-item">1.01<li><ul>' +
-                '<li>Realtime event handling via websocket.</ul>' +
-                '<li class="ctb-version-item">1.00<li><ul>' +
-                '<li>Initial version.</ul>' +
-                '</ul></div>');
+            $('body').append(`<div id="ctb-changes-dialog" title="Chat Top Bar Change Log${title}">` +
+                             `<div class="ctb-important">For details see <a href="${URL_UPDATES}">the StackApps page</a>!${devmsg}</div>${CHANGE_LOG_HTML}</div>`);
             $('.ctb-version-item, .ctb-important').css({'margin-top': '1.5ex', 'font-size': '120%'});
             $('.ctb-version-item').css({'font-weight': 'bold'});
             $('#ctb-changes-list ul').css('margin-left', '2ex');
@@ -1523,6 +1441,93 @@ function MakeChatTopbar ($, tbData) {
             .replace(pseudoUrlPattern, '$1<a href="http://$2">$2</a>')
             .replace(emailAddressPattern, '<a href="mailto:$&">$&</a>');
     }
+
+    //==============================================================================================
+
+    const CHANGE_LOG_HTML = `
+        <ul id="ctb-changes-list">
+        <li class="ctb-version-item">1.13<li><ul>
+        <li>Site icons are now displayed in room results. Three options for positioning are present in settings dialog (I could not decide).
+        <li>The site icon <i>visibility</i> setting is per chat server. Seems reasonable given that MSE and SO rooms all have the same boring icons, while SE is very exciting.
+        <li><span>ChatTopBar.setFaviconVisible</span> and <span>ChatTopBar.setFaviconStyle</span> to change icon settings.
+        <li>Window event names made more unique to avoid future namespace collisions.</ul>
+        <li class="ctb-version-item">1.12.3<li><ul>
+        <li>Entire area of room search results is now clickable.
+        <li>Option to linkify URLs in room search results (enabled by default).
+        <li>Links in room search results are now underlined on hover, to make it clear what you're clicking on.
+        <li><span>ChatTopBar.setLinkifyDescriptions</span> to change linkify option.
+        <li>Add workaround for <a href="https://meta.stackexchange.com/q/297021/230261">chat highlighting style bug</a>.</ul>
+        <li class="ctb-version-item">1.12.2<li><ul>
+        <li>Fixed an issue introduced with Firefox support where topbar sometimes didn't load on Chrome.</ul>
+        <li class="ctb-version-item">1.12<li><ul>
+        <li>Integrated Shog9's awesome Firefox patch. Now works on Firefox!
+        <li>Patch also lets it work on internal company chat rooms (which have an extra iframe).
+        <li>Chat theme code updated to work on Firefox.</ul>
+        <li class="ctb-version-item">1.11.3<li><ul>
+        <li>Room dropdown button brightness fixed to match other buttons.
+        <li>Also, theme brightness was being applied twice to that button.</ul>
+        <li class="ctb-version-item">1.11.2<li><ul>
+        <li>Fix match patterns to not run on room info pages.
+        <li>Make flag icon (blue notifications on right) disappear on click.
+        <li>Scrolling to replies no longer hides them under the topbar.
+        <li>Overscrolling on change log no longer scrolls chat.
+        <li>Overscrolling on room search results no longer scrolls chat.</ul>
+        <li class="ctb-version-item">1.11.1<li><ul>
+        <li>Topbar icon hover fixed (thanks Shog9!)
+        <li>Update flasher notification now ignores revision number updates.</ul>
+        <li class="ctb-version-item">1.11<li><ul>
+        <li>Chat room search contains selector for room tab (all, mine, favorites).
+        <li>Default search sort order is now by people, with option to use activity instead.
+        <li><span>ChatTopBar.setSearchByActivity</span> to change sort order option.</ul>
+        <li class="ctb-version-item">1.10<li><ul>
+        <li>Search for chat rooms from the top bar! Click the chat icon near the left. Supports search-as-you-type (can be disabled), and optionally
+        lets you open rooms in the current tab. Try it! Check settings dialog for new options.
+        <li><span>ChatTopBar</span> new functions for search options.
+        <li>Cleaner list styling in the change log dialog.</ul>
+        <li class="ctb-version-item">1.09<li><ul>
+        <li>Clicking site search box in SE dropdown no longer closes dropdown.
+        <li>Also, search box didn't work, anyways. Now it does.
+        <li>Mousewheel over-scrolling on topbar dropdowns no longer scrolls chat.</ul>
+        <li class="ctb-version-item">1.08<li><ul>
+        <li>Chat server links placed in SE dropdown (click name to open in new tab, "switch" to open in current tab).
+        <li>Clicking "switch" on chat server link automatically rejoins favorite rooms (can be disabled in settings).
+        <li>Brightness setting is now associated with the current room's theme rather than the room itself (so it applies to all rooms with the same theme).
+        Apologies for any reset settings (it does make a good attempt to copy them, though).
+        <li>Change log now displayed after update (when flashing "topbar" link clicked).
+        <li><span>ChatTopBar.showChangeLog()</span> will always show the change log, too.
+        <li><span>ChatTopBar</span> functions for additional settings added.
+        <li>Don't load jQuery UI if it's already loaded.
+        <li>Don't run in iframes (by default), for compatibility with some other scripts. <span>ChatTopBar.setRunInFrame()</span> can control this.
+        <li>Don't run in mobile chat layout, for compatibility with some other scripts..</ul>
+        <li class="ctb-version-item">1.07<li><ul>
+        <li>Settings dialog (accessible from "topbar" link in footer).
+        <li>Wide mode now matches right side padding instead of fixed at 95%.
+        <li>More descriptive search box placeholders.
+        <li><span>ChatTopBar.forgetEverything</span>, for testing.</ul>
+        <li class="ctb-version-item">1.06<li><ul>
+        <li>Brightness now only applied if theme enabled.
+        <li>Sidebar resized so it doesn't hide behind the bottom panel.
+        <li><span>ChatTopBar.fakeUnreadCounts(inbox,rep)</span> for debugging.
+        <li>Explicit <span>unsafeWindow</span> grant.
+        <li>Sort output of <span>dumpSettings()</span>.</ul>
+        <li class="ctb-version-item">1.05<li><ul>
+        <li>Per-room icon/text brightness option.
+        <li>Option to suppress console output.
+        <li>Ability to dump settings to console for testing.
+        <li>Fixed a style bug where things were happening before CSS was loaded, was sometimes causing non-themed topbar to have a white background instead of black.</ul>
+        <li class="ctb-version-item">1.03<li><ul>
+        <li><span>ChatTopBar</span> console interface for setting options.
+        <li>Widen / theme options now user-settable.
+        <li>Ability to forget cached account ID for testing.</ul>
+        <li class="ctb-version-item">1.02<li><ul>
+        <li>WebSocket reconnect when connection lost.
+        <li>Beta code for themed topbar.
+        <li>Better console logging.</ul>
+        <li class="ctb-version-item">1.01<li><ul>
+        <li>Realtime event handling via websocket.</ul>
+        <li class="ctb-version-item">1.00<li><ul>
+        <li>Initial version.</ul>
+        </ul>`;
 
 }
 })();
