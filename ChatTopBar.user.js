@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.14-dev3
+// @version      1.14-dev4
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -96,10 +96,13 @@ function MakeChatTopbar ($, tbData) {
     });
 
     // The main chat server page has a topbar and is on the same domain, load it up
-    // in an invisible iframe.
+    // in an invisible iframe. Note: We load /faq, because / and the various room tab
+    // pages generally make periodic requests to e.g. /rooms and stuff to keep their
+    // info up to date, and there's no reason for us to be making background requests
+    // that we don't need. The /faq page doesn't do any periodic XHR stuff.
     var frame = $('<iframe/>')
        .css('display', 'none')
-       .attr('src', '/')
+       .attr('src', '/faq')
        .appendTo('body');
 
     // Start grabbing the account ID while the frame is loading to minimize load time.
@@ -718,7 +721,7 @@ function MakeChatTopbar ($, tbData) {
     }
 
     // Perform room search.
-    function doRoomSearch (more, initparams) {
+    function doRoomSearch (more) {
 
         let res = $('#mc-roomfinder-results');
         let status = $('#mc-result-more');
