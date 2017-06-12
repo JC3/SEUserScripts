@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.14-dev4
+// @version      1.14-dev5
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -617,7 +617,11 @@ function MakeChatTopbar ($, tbData) {
             #mc-result-more { color: #999; }
             .mc-result-more-link { font-weight: bold; color: #0077cc !important; }
             #mc-roomfinder-tab, #ctb-settings-dialog select { border: 1px solid #cbcbcb; box-shadow: inset 0 1px 2px #eff0f1,0 0 0 #FFF; color: #2f3337; }
-            .ui-widget select { font-family: inherit; font-size: inherit; }
+            .topbar-dialog.ui-widget select { font-family: inherit; font-size: inherit; }
+            /* The following styles prevent theme brightness from affecting hover/on. But they're kinda weird looking. */
+            /*.topbar .topbar-icon-on { filter: brightness(1.0) !important; }*/
+            /*.topbar .yes-hover:hover { filter: brightness(1.0) !important; }*/
+            /*.topbar .topbar-menu-links a:hover { filter: brightness(1.0) !important; }*/
            `).appendTo('head');
 
         // Site input does this but I don't really like it on the dropdown:
@@ -1229,7 +1233,7 @@ function MakeChatTopbar ($, tbData) {
         brightness = loadOrStore(key, brightness, 1.0);
 
         let themed = load('themed', false);
-        $('.network-items > .topbar-icon, .topbar-menu-links').css('filter', `brightness(${themed ? brightness : 1.0})`);
+        $('.network-items > .topbar-icon, .topbar-menu-links > a').css('filter', `brightness(${themed ? brightness : 1.0})`);
 
         return brightness;
 
