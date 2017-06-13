@@ -1462,7 +1462,7 @@ function MakeChatTopbar ($, tbData) {
         <li>Topbar source iframe was continuously generating a lot of background XHR noise, since
             it was / and would periodically refresh room/event/user lists, etc. Now loads /faq
             instead, which prevents loads of unnecessary requests.
-        <li><span>ChatTopBar.setCompactCompactResults</span> to support compact mode option.
+        <li><span>ChatTopBar.setCompactResults</span> to support compact mode option.
         <li>Misc. code and source comment tweaks.</ul>
         <li class="ctb-version-item">1.13<li><ul>
         <li>Site icons are now displayed in room results. Three options for positioning are present in settings dialog (I could not decide).
