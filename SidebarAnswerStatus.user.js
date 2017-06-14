@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sidebar Answer Status
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.10-dev1
+// @version      1.10-dev2
 // @description  Show answer status of questions in sidebar.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -16,10 +16,25 @@
 // @grant        GM_listValues
 // @grant        GM_deleteValue
 // @grant        unsafeWindow
+// @run-at       document-idle
 // ==/UserScript==
 
 (function() {
     'use strict';
+
+    const NAMESPACE_UID = '2ddb91e7-a18c-4349-9f01-f9b54c97c5b9';
+
+    window.addEventListener(`doeverything-${NAMESPACE_UID}`, function (ev) {
+        if (ev.detail && ev.detail.jquery)
+            doEverything(ev.detail.jquery);
+    });
+
+    let script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.textContent = `window.dispatchEvent(new CustomEvent('doeverything-${NAMESPACE_UID}', { detail: { jquery: window.jQuery } }))`;
+    document.body.appendChild(script);
+
+function doEverything ($) {
 
     migrateOldData();
 
@@ -385,5 +400,7 @@
             console.log('  Migrate: Finished.');
         }
     }
+
+}
 
 })();
