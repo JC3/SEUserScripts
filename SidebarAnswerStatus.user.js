@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sidebar Answer Status
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.10-dev2
+// @version      1.10-dev3
 // @description  Show answer status of questions in sidebar.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -17,32 +17,17 @@
 // @grant        GM_deleteValue
 // @grant        unsafeWindow
 // @run-at       document-idle
+// @require      https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    const NAMESPACE_UID = '2ddb91e7-a18c-4349-9f01-f9b54c97c5b9';
-
-    window.addEventListener(`doeverything-${NAMESPACE_UID}`, function (ev) {
-        if (ev.detail && ev.detail.jquery)
-            doEverything(ev.detail.jquery);
-    });
-
-    let script = document.createElement('script');
-    script.type = 'text/javascript';
-    script.textContent = `window.dispatchEvent(new CustomEvent('doeverything-${NAMESPACE_UID}', { detail: { jquery: window.jQuery } }))`;
-    document.body.appendChild(script);
-
-function doEverything ($) {
-
-    migrateOldData();
-
     // Used by cacheLoad() and cacheStore().
     const cacheCurrentTime = Date.now();
 
     // Stuff we store persistently, like stats.
-    var persist = load('persist', {});
+    var persist = objectLoad('persist', {});
     persist.api_avoided = persist.api_avoided || 0;
     persist.api_success = persist.api_success || 0;
     persist.api_total = persist.api_total || 0;
@@ -163,7 +148,7 @@ function doEverything ($) {
      */
     function finalize (e) {
 
-        store('persist', persist);
+        objectStore('persist', persist);
 
         var s = persist.api_avoided;
         var a = persist.api_success;
@@ -186,24 +171,29 @@ function doEverything ($) {
 
     }
 
-    /* Save an object to persistent storage. */
-    function store (key, obj, namespace) {
+    /* Save an object to persistent storage. The object must not have a property
+     * named 'created', otherwise it might conflict with the question cache. Try
+     * not to pick a conflicting key name, either.
+     */
+    function objectStore (key, obj) {
 
         try {
-            GM_setValue(`${namespace||''}/${key}`, JSON.stringify(obj));
+            GM_setValue(key, JSON.stringify(obj));
         } catch (e) {
             console.error(e);
         }
 
     }
 
-    /* Load an object from persistent storage, return def if it's not there. */
-    function load (key, def, namespace) {
+    /* Load an object from persistent storage, return def if it's not there. Try
+     * not to pick a key that conflicts with the question cache.
+     */
+    function objectLoad (key, def) {
 
         var obj = null;
 
         try {
-            obj = JSON.parse(GM_getValue(`${namespace||''}/${key}`, null));
+            obj = JSON.parse(GM_getValue(key, null));
         } catch (e) {
             console.error(e);
         }
@@ -212,54 +202,20 @@ function doEverything ($) {
 
     }
 
-    /* Remove an object from persistent storage. */
-    function remove (key, namespace) {
-
-        try {
-            GM_deleteValue(`${namespace||''}/${key}`);
-        } catch (e) {
-            console.error(e);
-        }
-
-    }
-
-    /* Get keys for all objects in persistent storage in a given namespace (or all
-     * if namespace undefined. Use '' for default namespace. */
-    function stored (namespace) {
-
-        let keys = [];
-
-        try {
-            for (let key of GM_listValues())
-                if (namespace === undefined || key.startsWith(`${namespace}/`)) {
-                    let parse = /^([^\/]*)\/(.*)$/.exec(key);
-                    if (parse) {
-                        keys.push({
-                            key: key,
-                            namespace: parse[1],
-                            name: parse[2]
-                        });
-                    } else {
-                        console.log(`Sidebar Answer Status: Warning: Old style key? ${key}`);
-                    }
-                }
-        } catch (e) {
-            console.error(e);
-        }
-
-        return keys;
-
-    }
-
     /* Store an object in the cache. The creation timestamp will be saved, expiration
      * is checked on load.
      */
     function cacheStore (key, item) {
 
-        store(key, {
-            item: item,
-            created: cacheCurrentTime
-        }, 'cache');
+        try {
+            var entry = {
+                item: item,
+                created: cacheCurrentTime
+            };
+            GM_setValue(key, JSON.stringify(entry));
+        } catch (e) {
+            console.error(e);
+        }
 
     }
 
@@ -272,10 +228,10 @@ function doEverything ($) {
         var item = null;
 
         try {
-            var entry = load(key, null, 'cache');
+            var entry = JSON.parse(GM_getValue(key, null));
             if (entry && entry.created) {
                 if (cacheCurrentTime >= (entry.created + expireTime))
-                    remove(key, 'cache');
+                    GM_deleteValue(key);
                 else
                     item = entry.item;
             }
@@ -293,61 +249,91 @@ function doEverything ($) {
 
         try {
             // get stable list of keys first since we may be removing as we go.
-            for (let key of stored('cache'))
-                cacheLoad(key.name, persist.opt_expire); // deletes expired objects as a side-effect.
+            var keys = [];
+            for (let key of GM_listValues())
+                keys.push(key);
+            for (let key of keys)
+                cacheLoad(key, persist.opt_expire); // deletes expired objects as a side-effect.
         } catch (e) {
             console.error(e);
         }
 
     }
 
-    // Console interface.
-    unsafeWindow.SidebarAnswerStatus = { };
+    //-----------------------------------------------------------------------------------------
+    // Console interface. Overly complicated because Firefox.
+    //-----------------------------------------------------------------------------------------
+
+    const NAMESPACE_UID = '7b5e065c-7460-4d8e-9912-729eb855466f';
+
+    function setupConsoleInterface (uid) {
+        window.SidebarAnswerStatus = {
+            setCacheExpireSeconds: function (seconds) {
+                window.dispatchEvent(new CustomEvent(`setCacheExpireSeconds-${uid}`, { detail: { seconds: seconds }}));
+            },
+            resetStats: function () {
+                window.dispatchEvent(new CustomEvent(`resetStats-${uid}`));
+            },
+            resetAll: function () {
+                window.dispatchEvent(new CustomEvent(`resetAll-${uid}`));
+            },
+            dumpInfo: function () {
+                window.dispatchEvent(new CustomEvent(`dumpInfo-${uid}`));
+            }
+        };
+    }
+
+    let script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.textContent = `(${setupConsoleInterface.toString()})(${JSON.stringify(NAMESPACE_UID)})`;
+    document.body.appendChild(script);
 
     /* Set cache expiration time. */
-    unsafeWindow.SidebarAnswerStatus.setCacheExpireSeconds = function (seconds) {
-        persist.opt_expire = seconds * 1000;
-        store('persist', persist);
-    };
+    window.addEventListener(`setCacheExpireSeconds-${NAMESPACE_UID}`, function (ev) {
+        persist.opt_expire = ev.detail.seconds * 1000;
+        objectStore('persist', persist);
+    });
 
     /* Reset statistics. */
-    unsafeWindow.SidebarAnswerStatus.resetStats = function () {
+    window.addEventListener(`resetStats-${NAMESPACE_UID}`, function (ev) {
         persist.api_avoided = 0;
         persist.api_success = 0;
         persist.api_total = 0;
-        store('persist', persist);
-    };
+        objectStore('persist', persist);
+    });
 
     /* Delete all persistent data, restoring to "factory" conditions. Provided to allow
      * easier testing through console.
      */
-    unsafeWindow.SidebarAnswerStatus.resetAll = function () {
+    window.addEventListener(`resetAll-${NAMESPACE_UID}`, function (ev) {
 
         var keys = [];
-        for (let key of stored()) {
+        for (let key of GM_listValues())
+            keys.push(key);
+        for (let key of keys) {
             try {
-                console.log(`Removing: ${key.key} => ${JSON.stringify(load(key.name, null, key.namespace))}`);
-                remove(key.name, key.namespace);
+                console.log(`Removing: ${key} => ${JSON.stringify(GM_getValue(key))}`);
+                GM_deleteValue(key);
             } catch (e) {
                 console.error(e);
             }
         }
 
-    };
+    });
 
     /** Dump some info to the console for testing.
      */
-    unsafeWindow.SidebarAnswerStatus.dumpInfo = function () {
+    window.addEventListener(`dumpInfo-${NAMESPACE_UID}`, function (ev) {
 
         var cache = 0, other = 0;
 
         console.log('Cache:');
-        for (let key of stored('cache')) {
+        for (let key of GM_listValues()) {
             try {
-                let value = load(key.name, null, key.namespace);
+                let value = JSON.parse(GM_getValue(key));
                 if (value.created) {
                     cache ++;
-                    console.log(`${key.name} => ${JSON.stringify(value)}`);
+                    console.log(`${key} => ${JSON.stringify(value)}`);
                 }
             } catch (e) {
                 console.error(e);
@@ -355,12 +341,12 @@ function doEverything ($) {
         }
 
         console.log('Other:');
-        for (let key of stored('')) {
+        for (let key of GM_listValues()) {
             try {
-                let value = load(key.name, null, key.namespace);
+                let value = JSON.parse(GM_getValue(key));
                 if (!value.created) {
                     other ++;
-                    console.log(`${key.name} => ${JSON.stringify(value)}`);
+                    console.log(`${key} => ${JSON.stringify(value)}`);
                 }
             } catch (e) {
                 console.error(e);
@@ -369,38 +355,6 @@ function doEverything ($) {
 
         console.log(`Persistent Storage: Cached=${cache}, Other=${other}`);
 
-    };
-
-    // Migrate from previous version which used different naming scheme for stored
-    // values.
-    function migrateOldData () {
-        let oldpersist = GM_getValue('persist', null);
-        if (oldpersist) {
-            console.log('Sidebar Answer Status: Migrating from previous version...');
-            try {
-                for (let key of GM_listValues()) {
-                    try {
-                        console.log(`  Migrate: Removing '${key}'...`);
-                        GM_deleteValue(key);
-                    } catch (e) {
-                        console.error(e);
-                    }
-                }
-            } catch (x) {
-                console.error(x);
-            }
-            try {
-                console.log('  Migrate: Migrating settings to new format...');
-                let newpersist = JSON.parse(oldpersist);
-                console.log(`  Migrate: Settings: ${JSON.stringify(newpersist)}`);
-                store('persist', newpersist);
-            } catch (x) {
-                console.error(x);
-            }
-            console.log('  Migrate: Finished.');
-        }
-    }
-
-}
+    });
 
 })();
