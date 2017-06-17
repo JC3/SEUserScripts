@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sidebar Answer Status
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.10-dev3
+// @version      1.10
 // @description  Show answer status of questions in sidebar.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
