@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Sidebar Answer Status
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.09
+// @version      1.10
 // @description  Show answer status of questions in sidebar.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -16,6 +16,8 @@
 // @grant        GM_listValues
 // @grant        GM_deleteValue
 // @grant        unsafeWindow
+// @run-at       document-idle
+// @require      https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js
 // ==/UserScript==
 
 (function() {
@@ -258,27 +260,52 @@
 
     }
 
-    // Console interface.
-    unsafeWindow.SidebarAnswerStatus = { };
+    //-----------------------------------------------------------------------------------------
+    // Console interface. Overly complicated because Firefox.
+    //-----------------------------------------------------------------------------------------
+
+    const NAMESPACE_UID = '7b5e065c-7460-4d8e-9912-729eb855466f';
+
+    function setupConsoleInterface (uid) {
+        window.SidebarAnswerStatus = {
+            setCacheExpireSeconds: function (seconds) {
+                window.dispatchEvent(new CustomEvent(`setCacheExpireSeconds-${uid}`, { detail: { seconds: seconds }}));
+            },
+            resetStats: function () {
+                window.dispatchEvent(new CustomEvent(`resetStats-${uid}`));
+            },
+            resetAll: function () {
+                window.dispatchEvent(new CustomEvent(`resetAll-${uid}`));
+            },
+            dumpInfo: function () {
+                window.dispatchEvent(new CustomEvent(`dumpInfo-${uid}`));
+            }
+        };
+    }
+
+    let script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.textContent = `(${setupConsoleInterface.toString()})(${JSON.stringify(NAMESPACE_UID)})`;
+    document.body.appendChild(script);
 
     /* Set cache expiration time. */
-    unsafeWindow.SidebarAnswerStatus.setCacheExpireSeconds = function (seconds) {
-        persist.opt_expire = seconds * 1000;
+    window.addEventListener(`setCacheExpireSeconds-${NAMESPACE_UID}`, function (ev) {
+        persist.opt_expire = ev.detail.seconds * 1000;
         objectStore('persist', persist);
-    };
+    });
 
     /* Reset statistics. */
-    unsafeWindow.SidebarAnswerStatus.resetStats = function () {
+    window.addEventListener(`resetStats-${NAMESPACE_UID}`, function (ev) {
         persist.api_avoided = 0;
         persist.api_success = 0;
         persist.api_total = 0;
         objectStore('persist', persist);
-    };
+    });
 
     /* Delete all persistent data, restoring to "factory" conditions. Provided to allow
      * easier testing through console.
      */
-    unsafeWindow.SidebarAnswerStatus.resetAll = function () {
+    window.addEventListener(`resetAll-${NAMESPACE_UID}`, function (ev) {
 
         var keys = [];
         for (let key of GM_listValues())
@@ -292,11 +319,11 @@
             }
         }
 
-    };
+    });
 
     /** Dump some info to the console for testing.
      */
-    unsafeWindow.SidebarAnswerStatus.dumpInfo = function () {
+    window.addEventListener(`dumpInfo-${NAMESPACE_UID}`, function (ev) {
 
         var cache = 0, other = 0;
 
@@ -328,6 +355,6 @@
 
         console.log(`Persistent Storage: Cached=${cache}, Other=${other}`);
 
-    };
+    });
 
 })();
