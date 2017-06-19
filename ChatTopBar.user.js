@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.14
+// @version      1.14.1
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -23,21 +23,18 @@
     const NAMESPACE_UID = '9d2798e5-6d48-488c-924e-899a39b74954';
 
     // Firefox support: Store working copy of settings in tbData.
+    migrateSettings();
     var tbData = {settings: {}, scriptVersion: GM_info.script.version, uid: NAMESPACE_UID };
     for (let key of GM_listValues())
         tbData.settings[key] = GM_getValue(key);
 
     // Firefox support: Use events for settings instead of GM_* directly.
     window.addEventListener(`setvalue-${NAMESPACE_UID}`, function (ev) {
-        if (typeof ev.detail.key !== 'string' || typeof ev.detail.value !== 'string')
-            return;
         GM_setValue(ev.detail.key, ev.detail.value);
     });
 
     // Firefox support: Use events for settings instead of GM_* directly.
     window.addEventListener(`deletevalue-${NAMESPACE_UID}`, function (ev) {
-        if (typeof ev.detail.key !== 'string')
-            return;
         GM_deleteValue(ev.detail.key);
     });
 
@@ -161,7 +158,7 @@ function MakeChatTopbar ($, tbData) {
         setPreserveSearch: setPreserveSearch,
         setRunInFrame: setRunInFrame,
         showChangeLog: showChangeLog,
-        forgetAccount: () => store('account', null),
+        forgetAccount: () => forgetSetting('account'),
         forgetEverything: forgetEverything,
         dumpSettings: dumpSettings,
         fakeUnreadCounts: fakeUnreadCounts
@@ -273,7 +270,7 @@ function MakeChatTopbar ($, tbData) {
                 'margin-top': `${topbar.height()}px`
             });
             $('#sidebar').css({
-                height: `calc(100% - ${topbar.height()}px`
+                height: `calc(100% - ${topbar.height()}px)`
             });
             $(window).trigger('resize'); // Force sidebar resize, guess SE does it dynamically.
             installReplyScrollHandler(topbar.height()); // Also take over scrolling for reply buttons, see comments there.
@@ -287,10 +284,10 @@ function MakeChatTopbar ($, tbData) {
         defAccountId.then(function (id) {
 
             if (id === null) {
-                log('Account ID query failed?');
+                log('Not opening WebSocket (no account ID).');
             } else {
                 let realtimeConnect = function () {
-                    log(`Opening WebSocket...`);
+                    log('Opening WebSocket...');
                     let ws = new WebSocket('wss://qa.sockets.stackexchange.com');
                     ws.onopen = function () {
                         log(`WebSocket opened (your network ID is ${id}).`);
@@ -336,16 +333,20 @@ function MakeChatTopbar ($, tbData) {
     // multiple chat servers. Returns a promise.
     function getAccountId () {
 
-        // If user is not logged in CHAT.CURRENT_USER_ID will be 0 and there will
-        // be some errors below, but I don't see any need to handle it more gracefully
-        // right now since we still end up with a properly functioning topbar.
+        // If user is not logged in CHAT.CURRENT_USER_ID will be 0.
         return $.Deferred(function (def) {
+
+            if (CHAT.CURRENT_USER_ID === 0) {
+                log('Cannot get account ID: You are not logged in.');
+                def.resolve(null);
+                return;
+            }
 
             let server = window.location.host;
             let fkey = $('#fkey').val();
             let account_cached = load('account', null);
 
-            if (fkey !== load(`fkey-${server}`, null) || account_cached === null) {
+            if (fkey !== load(`fkey-${server}`, null) || !account_cached) {
                 log(`Obtaining parent profile (your chat ID is ${CHAT.CURRENT_USER_ID})...`);
                 $.get(`/users/thumbs/${CHAT.CURRENT_USER_ID}`, function (data) {
                     let a = document.createElement('a');
@@ -1398,30 +1399,18 @@ function MakeChatTopbar ($, tbData) {
         return value;
     }
 
-    // Helper for GM_setValue.
+    // Helper for GM_setValue (indirect since 1.10 for FF support).
     function store (key, value) {
-        // Only strings allowed.
-        value = String(value);
         tbData.settings[key] = value;
         window.dispatchEvent(new CustomEvent(`setvalue-${tbData.uid}`, {detail: {key: key, value: value}}));
     }
 
-    // Helper for GM_getValue.
+    // Helper for GM_getValue (indirect since 1.10 for FF support).
     function load (key, def) {
-
         if (typeof tbData.settings[key] === 'undefined')
             return def;
-
-        var ret = tbData.settings[key];
-
-        // Coerce the type based on the default value, for convenience and compatibility
-        if (typeof def === 'boolean')
-            ret = ret !== 'false' && ret !== '';
-        else if (typeof def === 'number')
-            ret = Number(ret);
-
-        return ret;
-
+        else
+            return tbData.settings[key];
     }
 
     // Helper for console.log.
@@ -1448,6 +1437,11 @@ function MakeChatTopbar ($, tbData) {
 
     const CHANGE_LOG_HTML = `
         <ul id="ctb-changes-list">
+        <li class="ctb-version-item">1.14.1<li><ul>
+        <li>Fixed a minor style issue (no visible change).
+        <li>Restore all settings back to proper types instead of strings (your settings should not
+            be affected, but apologies in advance if they are).
+        <li>Slightly more graceful handling of errors when visiting a chat room while not logged in.</ul>
         <li class="ctb-version-item">1.14<li><ul>
         <li>New "compact" view for room search results (check it out in settings).
         <li>Search params are now preserved across room changes when room is visited from result list
@@ -1548,4 +1542,43 @@ function MakeChatTopbar ($, tbData) {
         </ul>`;
 
 }
+
+    // 1.10 changed all settings values to strings, which also inadvertently
+    // reset everybody's settings. 1.14.1 changes back to correct types, but
+    // this time we'll migrate settings properly so nobody gets reset. Note:
+    // this function is not in MakeTopBar and is not part of the injected
+    // script.
+    function migrateSettings () {
+
+        try {
+            for (let key of GM_listValues()) {
+                try {
+                    if (key.startsWith('fkey-') || key === 'changesViewedFor') { // Already strings
+                        continue;
+                    } else if (key.startsWith('brightness-') || key === 'account') { // These are numbers
+                        let setting = GM_getValue(key, null);
+                        if (setting !== null && typeof setting === 'string') {
+                            console.log(`Chat Top Bar: Migrated ${key} (${typeof setting}) => number (${setting})`);
+                            GM_setValue(key, Number(setting));
+                        }
+                    } else { // Rest are booleans or the occasional string
+                        let setting = GM_getValue(key, null);
+                        if (setting === 'true') {
+                            console.log(`Chat Top Bar: Migrated ${key} (${typeof setting}) => boolean (${setting})`);
+                            GM_setValue(key, true);
+                        } else if (setting === 'false') {
+                            console.log(`Chat Top Bar: Migrated ${key} (${typeof setting}) => boolean (${setting})`);
+                            GM_setValue(key, false);
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+        } catch (x) {
+            console.error(x);
+        }
+
+    }
+
 })();
