@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         More Share Links
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.03
+// @version      1.04
 // @description  Adds other formatting options to share links.
 // @author       Jason C
 // @include      /^https?:\/\/([^/]*\.)?stackoverflow.com/questions/\d.*$/
@@ -14,10 +14,36 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
+// @grant        GM_listValues
+// @run-at       document-idle
 // ==/UserScript==
 
 (function() {
     'use strict';
+
+    const NAMESPACE_UID = '2fa83f05-b32c-45b8-99ca-53bbe79156cc';
+
+    let data = { settings: {}, uid: NAMESPACE_UID };
+    for (let key of GM_listValues())
+        data.settings[key] = GM_getValue(key);
+
+    window.addEventListener(`setvalue-${NAMESPACE_UID}`, function (ev) {
+        GM_setValue(ev.detail.key, ev.detail.value);
+    });
+
+    window.addEventListener(`reset-${NAMESPACE_UID}`, function (ev) {
+        for (let key of GM_listValues())
+            GM_deleteValue(key);
+    });
+
+    (function (f, d) {
+        let script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.textContent = `(${f.toString()})(window.jQuery, ${JSON.stringify(d)})`;
+        document.body.appendChild(script);
+    })(MoreShareLinks, data);
+
+function MoreShareLinks ($, data) {
 
     const DATA_ID        = 'moresharelinks-id';
     const DATA_SHORT_URL = 'moresharelinks-short-url';
@@ -144,24 +170,26 @@
     }
 
     function store (key, value) {
-        try {
-            GM_setValue(key, value);
-        } catch (e) {
-            console.error(e);
-        }
+        data.settings[key] = value;
+        window.dispatchEvent(new CustomEvent(`setvalue-${data.uid}`, { detail: {
+            key: key,
+            value: value
+        }}));
     }
 
     function load (key, def) {
-        try {
-            return GM_getValue(key, def);
-        } catch (e) {
-            console.error(e);
+        if (typeof data.settings[key] === 'undefined')
             return def;
-        }
+        else
+            return data.settings[key];
     }
 
-    unsafeWindow.moreShareLinksReset = function () {
-        GM_deleteValue(dataKey);
+    window.MoreShareLinks = {
+        forgetEverything: function () {
+            window.dispatchEvent(new CustomEvent(`reset-${data.uid}`));
+        }
     };
+
+}
 
 })();
