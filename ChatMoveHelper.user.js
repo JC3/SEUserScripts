@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chat Move Tool
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.02
+// @version      1.03
 // @description  Makes archiving bot messsages in chat a little easier.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -17,20 +17,22 @@
 (function() {
     'use strict';
 
+    const NAMESPACE_UID = '8ec2f538-b698-4471-b38d-e8b61be84e87';
+
     // Firefox support: Store working copy of settings in fakedb.
-    var fakedb = {settings: {}, scriptVersion: GM_info.script.version};
+    var fakedb = {settings: {}, scriptVersion: GM_info.script.version, uid: NAMESPACE_UID};
     for (let key of GM_listValues())
         fakedb.settings[key] = GM_getValue(key);
 
     // Firefox support: Use events for settings instead of GM_* directly.
-    window.addEventListener('setvalue-8ec2f538-b698-4471-b38d-e8b61be84e87', function (ev) {
+    window.addEventListener(`setvalue-${NAMESPACE_UID}`, function (ev) {
         if (typeof ev.detail.key !== 'string' || typeof ev.detail.value !== 'string')
             return;
         GM_setValue(ev.detail.key, ev.detail.value);
     });
 
     // Firefox support: Use events for settings instead of GM_* directly.
-    window.addEventListener('deletevalue-8ec2f538-b698-4471-b38d-e8b61be84e87', function (ev) {
+    window.addEventListener(`deletevalue-${NAMESPACE_UID}`, function (ev) {
         if (typeof ev.detail.key !== 'string')
             return;
         GM_deleteValue(ev.detail.key);
@@ -95,7 +97,7 @@ function MakeChatMoveTool ($, fakedb) {
 
         // Add a bunch of stuff to the move messages dialog.
         let controls = $('.message-controls');
-        let btnselect, btnclean, btnautohide;
+        let btnselect, btnclean, btnautohide, btnregex;
 
         let table = $('<table class="mm-table"/>')
             .append($('<tr class="mm-label-message"><td><label><input type="radio" name="mm-opt-usermode" value="name"/>user name:</label></td><td><input id="mm-opt-username" type="text"/></tr>'))
@@ -134,9 +136,9 @@ function MakeChatMoveTool ($, fakedb) {
         });
 
         // Set up helpful tooltips.
-        $('label:has(input[name="mm-opt-usermode"][value="name"]), #mm-opt-username').attr('title', 'match messages by user name (exact, case-sensitive)');
+        $('label:has(input[name="mm-opt-usermode"][value="name"]), #mm-opt-username').attr('title', 'match messages by user name (case-sensitive); if starts and ends with /, it\'s a regex');
         $('label:has(input[name="mm-opt-usermode"][value="id"]), #mm-opt-userid').attr('title', 'match messages by user chat id');
-        $('#mm-opt-commands, #mm-opt-prefix').attr('title', 'match messages that start with the command prefix (case-sensitive)');
+        $('#mm-opt-commands, #mm-opt-prefix').attr('title', 'match messages that start with the command prefix (case-sensitive); if starts and ends with /, it\'s a regex');
         $('#mm-opt-replies').attr('title', 'match messages that are replies to the above user name/id');
         btnselect.attr('title', 'select all messages matching the above filters');
         $('input[type="button"][value="deselect"]', controls).attr('title', 'deselect all selected messages');
@@ -232,7 +234,30 @@ function MakeChatMoveTool ($, fakedb) {
 
     }
 
-    // Select all messages that match the current filter.
+	// Return true if text matches pattern, false if not.
+	//    - If pattern starts and ends with / it's treated as a regex, otherwise:
+	//    - If forwhat is 'username' an exact comparison is performed, or
+	//    - If forwhat is 'command' then startsWith is used.
+	function textMatches (text, pattern, forwhat) {
+
+		let regex = false;
+		if (pattern.startsWith('/') && pattern.endsWith('/') && pattern.length > 1) {
+			pattern = pattern.substring(1, pattern.length - 1);
+			regex = true;
+		}
+
+		if (regex) {
+			return new RegExp(pattern).test(text);
+		} else {
+			if (forwhat === 'command')
+				return text.startsWith(pattern);
+			else
+				return text === pattern;
+		}
+
+	}
+
+	// Select all messages that match the current filter.
     function select () {
 
         deselect();
@@ -240,7 +265,7 @@ function MakeChatMoveTool ($, fakedb) {
         let messages;
         if (options.filter.usermode === 'name') {
             messages = $('#chat .user-container .username')
-                .filter(function () { return $(this).text().trim() === options.filter.username; })
+                .filter(function () { return textMatches($(this).text().trim(), options.filter.username, 'username'); })
                 .closest('.user-container')
                 .find('.message');
         } else if (options.filter.usermode === 'id') {
@@ -261,7 +286,7 @@ function MakeChatMoveTool ($, fakedb) {
 
         if (options.filter.commands && options.filter.commandPrefix !== '') {
             $('.message')
-                .filter(function () { return $(this).text().trim().startsWith(options.filter.commandPrefix); })
+                .filter(function () { return textMatches($(this).text().trim(), options.filter.commandPrefix, 'command'); })
                 .attr('data-mm-type', 'command')
                 .addClass('selected');
         }
@@ -424,7 +449,7 @@ function MakeChatMoveTool ($, fakedb) {
         try {
             let val = JSON.stringify(obj);
             fakedb.settings[key] = val;
-            window.dispatchEvent(new CustomEvent('setvalue-8ec2f538-b698-4471-b38d-e8b61be84e87', {detail: {key: key, value: val}}));
+            window.dispatchEvent(new CustomEvent(`setvalue-${fakedb.uid}`, {detail: {key: key, value: val}}));
         } catch (e) {
             console.error(e);
         }
@@ -443,7 +468,7 @@ function MakeChatMoveTool ($, fakedb) {
     function reset (noreload) {
 
         for (let key of Object.keys(fakedb.settings)) {
-            window.dispatchEvent(new CustomEvent('deletevalue-8ec2f538-b698-4471-b38d-e8b61be84e87', {detail: {key: key}}));
+            window.dispatchEvent(new CustomEvent(`deletevalue-${fakedb.uid}`, {detail: {key: key}}));
             delete fakedb.settings[key];
             console.log(`Removed ${key}...`);
         }
