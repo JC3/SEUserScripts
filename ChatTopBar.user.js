@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Top bar in chat.
 // @namespace    https://stackexchange.com/users/305991/jason-c
-// @version      1.14.1
+// @version      1.14.2
 // @description  Add a fully functional top bar to chat windows.
 // @author       Jason C
 // @include      /^https?:\/\/chat\.meta\.stackexchange\.com\/rooms\/[0-9]+.*$/
@@ -169,7 +169,7 @@ function MakeChatTopbar ($, tbData) {
 
         var tbframe = frame[0].contentWindow;
         var topbar = tbframe.$('.topbar');
-        var link = topbar.parent().find('link[rel="stylesheet"][href*="topbar"]');
+        var link = tbframe.$('link[rel="stylesheet"][href*="chrome.css"]');
 
         // tbframe.StackExchange.options.enableLogging = true;
 
@@ -1437,6 +1437,8 @@ function MakeChatTopbar ($, tbData) {
 
     const CHANGE_LOG_HTML = `
         <ul id="ctb-changes-list">
+        <li class="ctb-version-item">1.14.2<li><ul>
+        <li>Update topbar css link capture (no more topbar.css).</ul>
         <li class="ctb-version-item">1.14.1<li><ul>
         <li>Fixed a minor style issue (no visible change).
         <li>Restore all settings back to proper types instead of strings (your settings should not
